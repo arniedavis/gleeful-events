@@ -152,6 +152,8 @@ body.admin{background:var(--adm-bg);color:var(--adm-text);font-family:Arial,Helv
 .adm-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--adm-line);background:var(--adm-bg)}
 #viewBar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0 10px;border-bottom:1px solid var(--adm-line)}
 #viewBar .vbLabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--adm-mut);font-weight:700;margin-right:4px}
+#viewBar .vbScore{font-size:15px;font-weight:800;margin-left:16px;white-space:nowrap}
+#viewBar .vbScore b{font-weight:800}
 .card.collapsed{padding-bottom:12px}
 .card > h2{cursor:pointer;user-select:none}
 .card > h2::before{content:'▾ ';color:var(--gold2);font-weight:900}
@@ -208,12 +210,26 @@ input[type=color]{width:42px;height:38px;border:none;background:none;padding:0;c
 #shortcutsOv,#aiOv,#ppOv,#roundEndOv{position:fixed;inset:0;z-index:120;background:rgba(4,8,20,.8);display:flex;align-items:center;justify-content:center}
 #shortcutsOv .panel,#aiOv .panel,#ppOv .panel,#roundEndOv .panel{background:var(--adm-card);border:1px solid var(--adm-line);border-radius:14px;padding:20px 24px;max-width:620px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 #shortcutsOv h2,#aiOv h2,#ppOv h2,#roundEndOv h2{color:var(--gold2);margin:0 0 12px;font-size:18px}
+/* round-end: keep the board readable behind it while revealing answers */
+#roundEndOv{background:rgba(4,8,20,.32);align-items:flex-start}
+#roundEndOv .panel{margin-top:7vh;box-shadow:0 16px 40px rgba(0,0,0,.55)}
 #shortcutsOv table{width:100%;border-collapse:collapse;font-size:14px}
 #shortcutsOv td{padding:6px 8px;border-bottom:1px solid var(--adm-line);vertical-align:middle}
 #shortcutsOv td.k{width:74px;white-space:nowrap}
 .fmSticky{position:sticky;z-index:8;background:var(--adm-bg);box-shadow:0 8px 14px -10px rgba(0,0,0,.8)}
 .flash{animation:flashBg .5s ease}
 @keyframes flashBg{0%{background:#3a4a1f}100%{background:transparent}}
+.qBig{font-size:22px;font-weight:800;color:#fff;background:#0d1118;border:1px solid var(--adm-line);border-left:5px solid var(--gold2);border-radius:8px;padding:12px 16px;margin-bottom:12px;line-height:1.25}
+.tnameWrap{position:relative;display:inline-block}
+.tnameX{position:absolute;top:50%;right:4px;transform:translateY(-50%);border:none;background:none;color:var(--adm-mut);font-size:13px;line-height:1;padding:2px 4px;cursor:pointer;border-radius:4px}
+.tnameX:hover{color:#ff6b70;background:#2a2030}
+.statusBar{border-radius:10px;padding:8px 14px;margin:6px 0 4px;font-weight:800;font-size:15px;border:1px solid var(--adm-line)}
+.statusBar .lab{display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;opacity:.7;margin-bottom:2px;font-weight:700}
+.statusBar.k-neutral{background:#1a2230;color:#cdd6e6}
+.statusBar.k-action{background:#13294a;color:#cfe6ff;border-color:#2b6cb0}
+.statusBar.k-decision{background:#3a2f12;color:#ffe9a3;border-color:var(--gold2)}
+.statusBar.k-alert{background:#3a1820;color:#ffd0d4;border-color:#a8252b}
+.statusBar.k-win{background:#15351f;color:#bff0c8;border-color:#2e8b46}
 
 /* ============ HOST / EMCEE (iPad-friendly) ============ */
 body.host{background:#0a1020;color:#eef3ff;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%}
@@ -307,6 +323,7 @@ body.host{background:#0a1020;color:#eef3ff;font-family:Arial,Helvetica,sans-seri
       <button class="tab" data-tab="setup">Settings</button>
     </div>
     <div id="viewBar"></div>
+    <div id="statusBar" class="statusBar k-neutral"><span class="lab">Current status — do this next</span></div>
   </div>
   <div id="tab-game"></div>
   <div id="tab-fm" class="hidden"></div>
@@ -447,6 +464,12 @@ Give me your answers! We're looking for {nAnswers} answers — {revealed} reveal
 If you can't think of an answer, just say "Pass".
 We need {target} points total to win. Current total: {total}.
 >Read the 5 questions quickly. After the run, reveal each "Survey says…". Duplicate answers buzz automatically.`,
+ fm_p2:
+`{p2}, you're up — {curTime} seconds. Same five questions; answer fast.
+If you can't think of an answer, just say "Pass".
+If you duplicate {p1}'s answer, you'll hear this — [play the duplicate sound] — and I'll ask you to give another answer.
+We need {target} total to win — current total: {total}.
+>Capture answers; a duplicate auto-buzzes. Use the Sound board "duplicate" button if you want to cue it manually.`,
  fm_win:
 `{p1} and {p2} scored {total} — that's {target} or more… YOU WIN!
 >Celebrate! Cue the confetti and the big win.`,
@@ -461,19 +484,19 @@ Thanks for playing {game} — good night!`
 function getScripts(){ return Object.assign({}, DEFAULT_SCRIPTS, config.scripts||{}); }
 
 function newFM(){
-  return {selQs:[0,1,2,3,4].map(i=>Math.min(i,bank.fast.length-1)),stage:0,result:null,autoResult:false,pNames:['Player 1','Player 2'],
+  return {selQs:[0,1,2,3,4].map(i=>Math.min(i,bank.fast.length-1)),stage:0,result:null,autoResult:true,pNames:['Player 1','Player 2'],
     timer:{rem:config.t1,run:false},
     cells:Array.from({length:5},()=>({ans:['',''],pts:[0,0],ansShown:[false,false],ptsShown:[false,false]}))};
 }
 function newState(){
   const n = i=>Math.min(i,Math.max(0,bank.main.length-1));
   return {view:'idle', gameName:(config.gameName||'Friendly Feud'),
-    teams:[{name:'Team 1',color:'#e63946',score:0,players:['','',''],fmSel:[null,null]},{name:'Team 2',color:'#2e86de',score:0,players:['','',''],fmSel:[null,null]}],
+    teams:[{name:'',color:'#e63946',score:0,players:['','',''],fmSel:[null,null]},{name:'',color:'#2e86de',score:0,players:['','',''],fmSel:[null,null]}],
     podium:[0,0],   // which roster player from each team is at the face-off podium
     strikes:0,
     rounds:[{q:n(0),mult:1},{q:n(1),mult:1},{q:n(2),mult:2},{q:n(3),mult:2},{q:n(4),mult:3}],
     roundIdx:0,revealed:Array(8).fill(false),pot:0,awarded:false,awardedTo:null,showQ:false,
-    active:null,
+    active:null, turn:0,                 // turn = index of the controlling team's player whose turn it is
     buzz:{armed:false,winner:null},
     faceoffWinner:null,playPass:null,   // face-off play/pass decision
     foPhase:false,foBuzz:null,foReveals:[],foBuzzStruck:false, // face-off answer resolution
@@ -484,7 +507,7 @@ let state = (MODE==='admin' && loadLS('ffState')) || newState();
 if(MODE==='admin'){ // heal old saved states
   const fresh=newState();
   for(const k of Object.keys(fresh)) if(state[k]===undefined) state[k]=fresh[k];
-  state.teams.forEach(t=>{ if(!Array.isArray(t.players)||t.players.length<3) t.players=(t.players||[]).concat(['','','']).slice(0,Math.max(3,(t.players||[]).length)); if(!Array.isArray(t.fmSel)) t.fmSel=[null,null]; });
+  state.teams.forEach(t=>{ if(!Array.isArray(t.players)||t.players.length<3) t.players=(t.players||[]).concat(['','','']).slice(0,Math.max(3,(t.players||[]).length)); if(!Array.isArray(t.fmSel)) t.fmSel=[null,null]; if(/^team\s*[12]$/i.test((t.name||'').trim())) t.name=''; });
   if(!Array.isArray(state.podium)) state.podium=[0,0];
   if(state.fm && !Array.isArray(state.fm.pNames)) state.fm.pNames=['Player 1','Player 2'];
 }
@@ -541,6 +564,12 @@ function pushState(){
   send('state',state);
   renderAdmin();
 }
+function pushQuiet(){   // save + sync to board/host WITHOUT re-rendering the admin (keeps focus/Tab while typing)
+  if(MODE!=='admin')return;
+  saveLS('ffState',state);
+  send('state',state);
+  refreshStatus();
+}
 bc.onmessage=e=>{
   const {type,payload}=e.data||{};
   if(MODE==='board'){
@@ -565,9 +594,18 @@ bc.onmessage=e=>{
   }
 };
 function updateBoardStat(){
-  const el=$('#boardStat'); if(!el)return;
-  const ok=Date.now()-boardSeen<4000;
-  el.innerHTML=`<span class="statL ${ok?'ok':''}"></span>${ok?'scoreboard connected':'scoreboard not detected'}`;
+  const el=$('#boardStat');
+  if(el){ const ok=Date.now()-boardSeen<4000;
+    el.innerHTML=`<span class="statL ${ok?'ok':''}"></span>${ok?'scoreboard connected':'scoreboard not detected'}`; }
+  refreshStatus();
+}
+function refreshStatus(){   // update the global Current Status bar + Scoreboard-row scores in place
+  if(MODE!=='admin')return;
+  renderViewBar();
+  const bar=$('#statusBar'); if(!bar)return;
+  const st=computeStatus(state);
+  bar.className='statusBar k-'+st.kind;
+  bar.innerHTML='<span class="lab">Current status — do this next</span>'+esc(st.text);
 }
 
 /* ============================ SOUNDS (Web Audio, no files) ============================ */
@@ -777,11 +815,13 @@ function stopConfetti(){ if(confRAF){cancelAnimationFrame(confRAF);confRAF=null;
 /* ============================ HOST / EMCEE PANEL ============================ */
 let hostConnSeen=0;
 function podiumName(s,i){ const t=s.teams[i]; const idx=(s.podium&&s.podium[i])||0; const n=(t.players||[])[idx]; return (n&&n.trim())||(t.name+' player'); }
+function curTurnName(s){ if(s.active==null) return ''; const t=s.teams[s.active]; const idx=(s.turn!=null?s.turn:((s.podium&&s.podium[s.active])||0)); const n=(t.players||[])[idx]; return (n&&n.trim())||('Player '+(idx+1)); }
+function advanceTurn(s){ if(s.active==null)return; const n=Math.max(1,(s.teams[s.active].players||[]).length); s.turn=((s.turn||0)+1)%n; }
 function roundQ(s){ const r=s.rounds[s.roundIdx]; return bank.main[r.q]||{q:'',answers:[]}; }
 function fmPNameFor(s,p){ const n=(s.fm&&s.fm.pNames||[])[p]; return (n&&n.trim())||('Player '+(p+1)); }
 /* Build the step-by-step emcee script for the current state, from the
    (editable) templates in getScripts(). */
-const SEG_PHASE={idle:'Welcome',faceoff_pre:'Face-Off',faceoff_post:'Face-Off',faceoff_decide:'Face-Off',round_play:'Round',round_steal:'Round',round_awarded:'Round',fm_intro:'Fast Money',fm_win:'Fast Money',fm_lose:'Fast Money',winner:'Champions'};
+const SEG_PHASE={idle:'Welcome',faceoff_pre:'Face-Off',faceoff_post:'Face-Off',faceoff_decide:'Face-Off',round_play:'Round',round_steal:'Round',round_awarded:'Round',fm_intro:'Fast Money',fm_p2:'Fast Money',fm_win:'Fast Money',fm_lose:'Fast Money',winner:'Champions'};
 function segmentKey(s){
   if(s.faceoffWinner!=null && s.playPass==null) return 'faceoff_decide';  // any view
   if(s.foPhase) return 'faceoff_post';                                    // revealing face-off answers
@@ -791,7 +831,7 @@ function segmentKey(s){
     case 'round':
       if(s.stealMode) return 'round_steal';
       return s.awarded?'round_awarded':'round_play';
-    case 'fastmoney': return (s.fm&&s.fm.result==='win')?'fm_win':((s.fm&&s.fm.result==='lose')?'fm_lose':'fm_intro');
+    case 'fastmoney': return (s.fm&&s.fm.result==='win')?'fm_win':((s.fm&&s.fm.result==='lose')?'fm_lose':((s.fm&&s.fm.stage===1)?'fm_p2':'fm_intro'));
     case 'winner': return 'winner';
   }
   return 'idle';
@@ -841,10 +881,16 @@ function hostRender(s){
   const teamCard=i=>{const t=s.teams[i];return `<div class="h-team ${ctrlIdx===i?'control':''}" style="${ctrlIdx===i?('border-color:'+esc(t.color)):''}">
     <div class="nm" style="color:${esc(t.color)}">${esc(t.name)}</div>
     <div class="sc">${t.score}</div>
-    <div class="ctl">${ctrlIdx===i?'▶ IN CONTROL':''}</div></div>`;};
+    <div class="ctl">${ctrlIdx===i?('▶ IN CONTROL — '+esc(curTurnName(s))):''}</div></div>`;};
   // strikes / round / pot strip
   const pills=[];
-  if(s.view==='round'){ pills.push(`<div class="h-pill">Round <b>${s.roundIdx+1}</b> / ${s.rounds.length}</div>`); pills.push(`<div class="h-pill">Pot <b>${s.pot}</b></div>`); pills.push(`<div class="h-pill">Strikes <b>${'❌'.repeat(s.strikes)||'—'}</b></div>`); }
+  if(s.view==='round'||s.view==='faceoff'){
+    const ctrlNm = (s.active!=null && s.teams[s.active]) ? (s.teams[s.active].name||('Team '+(s.active+1))) : '';
+    const strk = s.strikes||0;
+    const stStyle = strk>0 ? ' style="background:#3a1820;border-color:#c0392b;color:#ffd2d6;font-weight:800"' : '';
+    if(s.view==='round'){ pills.push(`<div class="h-pill">Round <b>${s.roundIdx+1}</b> / ${s.rounds.length}</div>`); pills.push(`<div class="h-pill">Pot <b>${s.pot}</b></div>`); }
+    pills.push(`<div class="h-pill"${stStyle}>${ctrlNm?esc(ctrlNm)+' — ':''}Strikes <b>${'❌'.repeat(strk)||'—'}</b> ${strk}/3</div>`);
+  }
   if(s.view==='fastmoney'){ pills.push(`<div class="h-pill">Fast Money total <b>${fmTotalOf(s)}</b> / ${config.target}</div>`); }
   // active question + answers (round/faceoff)
   let qBlock='';
@@ -884,6 +930,7 @@ function hostRender(s){
 
 /* ============================ ADMIN ============================ */
 let curTab='game';
+let questionsVisited=false;  // set once the admin opens the Questions tab (setup Step 1)
 let bankSearch='';          // Questions tab search filter
 let bankHideUsed=false;     // Questions tab: hide questions marked used
 let csvImportMode='replace';// 'replace' or 'append' for CSV upload
@@ -913,6 +960,14 @@ async function enableMic(){
 
 function renderAdmin(){
   if(MODE!=='admin')return;
+  // preserve focus across re-renders (so Tab moves field→field instead of losing focus)
+  let fSel=null,fS=null,fE=null;
+  { const ae=document.activeElement;
+    if(ae && (ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT')){
+      const dc=ae.getAttribute('data-chg'), di=ae.getAttribute('data-inp');
+      if(dc) fSel='[data-chg="'+dc+'"]'; else if(di) fSel='[data-inp="'+di+'"]'; else if(ae.id) fSel='#'+ae.id;
+      if(fSel){ try{ fS=ae.selectionStart; fE=ae.selectionEnd; }catch(e){} }
+    } }
   { const g=$('#admGameName'); if(g) g.textContent=state.gameName||config.gameName||'Friendly Feud'; }
   // round-end announcement popup (fires once when a round is awarded)
   if(state.view==='round' && state.awarded && state.awardedTo!=null){ if(!roundEndShown){ roundEndShown=true; openRoundEnd(); } }
@@ -924,6 +979,8 @@ function renderAdmin(){
   else if(curTab==='scripts')renderScripts();
   else if(curTab==='setup')renderSetup();
   applyCollapsible();
+  refreshStatus();
+  if(fSel){ const el=document.querySelector(fSel); if(el){ try{el.focus();}catch(e){} if(fS!=null){ try{el.setSelectionRange(fS,fE);}catch(e){} } } }
 }
 function setFMStickyTop(){
   const ctl=$('#fmCtl'), head=$('.adm-sticky');
@@ -932,50 +989,126 @@ function setFMStickyTop(){
 function renderViewBar(){
   const s=state, vb=$('#viewBar'); if(!vb)return;
   const b=(v,l)=>`<button class="btn ${s.view===v?'gold':''}" data-act="view|${v}">${l}</button>`;
-  vb.innerHTML=`<span class="vbLabel">Scoreboard</span>${b('idle','🏠 Idle')}${b('faceoff','🔔 Face-Off')}${b('round','🎯 Round')}${b('fastmoney','💰 Fast Money')}`;
+  const scores=[0,1].map(i=>{const t=s.teams[i];return `<span class="vbScore"><b style="color:${esc(t.color)}">${esc(t.name||('Team '+(i+1)))}</b> ${t.score}</span>`;}).join('');
+  vb.innerHTML=`<span class="vbLabel">Scoreboard</span>${b('idle','🏠 Idle')}${b('faceoff','🔔 Face-Off')}${b('round','🎯 Round')}${b('fastmoney','💰 Fast Money')}<span style="flex:1"></span>${scores}`;
 }
 function collapseKey(txt){ return (String(txt).split(/[—·(]/)[0]||'').toLowerCase().replace(/[0-9]+/g,'').replace(/[^a-z]+/g,'-').replace(/^-+|-+$/g,'')||'block'; }
-function applyCollapsible(){
+function collapseScope(){ return (curTab==='game') ? ('view:'+(state.view||'idle')) : ('tab:'+curTab); }
+function applyCollapsible(){   // only APPLY saved state; toggling is handled by a delegated listener
   if(!config.collapsed) config.collapsed={};
-  // Game-tab boxes are scoped to the current scoreboard VIEW (Idle / Face-Off /
-  // Round / Fast Money) so each view keeps its own collapsed layout; other tabs
-  // are scoped to the tab. Each box is independent.
-  const scope = (curTab==='game') ? ('view:'+(state.view||'idle')) : ('tab:'+curTab);
+  const scope=collapseScope();
   $$('#tab-'+curTab+' > .card').forEach(card=>{
     const h2=card.querySelector(':scope > h2'); if(!h2)return;
-    const key=scope+'|'+collapseKey(h2.textContent);
-    if(config.collapsed[key]) card.classList.add('collapsed');
-    h2.addEventListener('click',()=>{
-      const now=!card.classList.contains('collapsed');
-      card.classList.toggle('collapsed',now);
-      config.collapsed[key]=now; saveConfig();
-    });
+    card.classList.toggle('collapsed', !!config.collapsed[scope+'|'+collapseKey(h2.textContent)]);
   });
 }
 function switchTab(t){
   curTab=t;
+  if(t==='bank') questionsVisited=true;   // setup Step 1 satisfied once they open Questions
   $$('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
   ['game','fm','bank','scripts','setup'].forEach(x=>$('#tab-'+x).classList.toggle('hidden',x!==t));
   renderAdmin();
 }
 
 /* ---------- GAME TAB ---------- */
+/* Real-time guidance: walks the whole workflow from setup to the end and tells
+   the admin exactly what's happening and what to do next. */
+function computeStatus(s){
+  const A=s.teams[0], B=s.teams[1];
+  const tn=i=> i!=null ? (s.teams[i].name||('Team '+(i+1))) : '';
+  const podName=i=>{ const t=s.teams[i]; const idx=(s.podium&&s.podium[i])||0; const n=(t.players||[])[idx]; return (n&&n.trim())||('Player '+(idx+1)); };
+  // setup readiness — Step 1: team names, Step 2: ≥3 players each
+  const isNamed=t=>{ const nm=(t.name||'').trim(); return nm && !/^team\s*[12]$/i.test(nm); };
+  const namesOk = isNamed(A) && isNamed(B);
+  const playersNeed=()=>{ const out=[]; for(let i=0;i<2;i++){ const t=s.teams[i];
+      const filled=(t.players||[]).filter(p=>(p||'').trim()).length;
+      if(filled<3) out.push(tn(i)+': '+(3-filled)+' more'); } return out; };
+  const fmNeed=()=>{ const out=[]; for(let i=0;i<2;i++){ const t=s.teams[i], sel=t.fmSel||[null,null];
+      const ok=k=> sel[k]!=null && (((t.players||[])[sel[k]])||'').trim();
+      if(!(ok(0)&&ok(1))) out.push(tn(i)); } return out; };
+  const boardConnected = (Date.now()-boardSeen) < 5000;
+  const setupPrompt=()=>{
+    if(!questionsVisited) return {kind:'decision',text:'❓ Step 1 — load your questions: click the “Questions” tab, then upload a CSV (📥 Upload & ADD or REPLACE) or edit the list, and use each question’s “use in…” menu to assign one to every Round (1–5) and each Fast Money slot.'};
+    if(!boardConnected) return {kind:'decision',text:'📺 Step 2 — from the Idle screen, open the Scoreboard: click “📺 Open Scoreboard Window” at the top and move it to your TV.'};
+    if(!namesOk) return {kind:'decision',text:'✏️ Step 3 — enter team names for Team 1 and Team 2 in the “Teams & Players — setup” box at the top.'};
+    const need=playersNeed();
+    if(need.length) return {kind:'decision',text:'✏️ Step 4 — enter 3–5 player names for each team in the setup box ('+need.join(' · ')+').'};
+    const fmn=fmNeed();
+    if(fmn.length) return {kind:'decision',text:'✏️ Step 5 — choose FM1 and FM2 (the two Fast Money players) for '+fmn.join(' and ')+', by tapping the FM1 / FM2 buttons next to two players.'};
+    return null;
+  };
+
+  // ----- SETUP / IDLE -----
+  if(s.view==='idle'){
+    const sp=setupPrompt(); if(sp) return sp;
+    const bothMax = s.teams.every(t=>(t.players||[]).filter(p=>(p||'').trim()).length>=5);
+    return {kind:'neutral',text:'✅ All set — teams, players and Fast Money picks are in. '+(bothMax?'Click':'Add more players if you like, or click')+' 🔔 Face-Off to start Round '+(s.roundIdx+1)+'.'};
+  }
+
+  // ----- WINNER / CHAMPIONS -----
+  if(s.view==='winner') return {kind:'win',text:'🏆 '+tn(s.winner)+' are the champions! Switch the scoreboard to 💰 Fast Money — the winning team’s two players load automatically.'};
+
+  // ----- FAST MONEY -----
+  if(s.view==='fastmoney'){
+    if(s.fm.result==='win') return {kind:'win',text:'💰 Fast Money WON — '+fmTotalOf(s)+' points! 🎉 That’s the end of the game. To play again, click 🔄 New Game (top of the page) — it resets scores, strikes and Fast Money but keeps your teams, players and questions.'};
+    if(s.fm.result==='lose') return {kind:'alert',text:'💰 Fast Money fell short — '+fmTotalOf(s)+' of '+config.target+'. That’s the end of the game. To play again, click 🔄 New Game (top of the page) — it resets scores, strikes and Fast Money but keeps your teams, players and questions.'};
+    const isDefault=p=>{ const n=((s.fm.pNames||[])[p]||'').trim(); return !n || /^player\s*[12]$/i.test(n); };
+    if(isDefault(0)||isDefault(1)) return {kind:'decision',text:'💰 Fast Money: set the two players first — use “Load {winning team}” or pick them in the Fast Money controls.'};
+    const p=s.fm.stage, cur=fmPNameFor(s,p), t=s.fm.timer;
+    const entered=s.fm.cells.filter(c=>(c.ans[p]||'').trim()).length;
+    const allRev = entered>0 && s.fm.cells.every(c=>!(c.ans[p]||'').trim() || c.ptsShown[p]);
+    if(t.run) return {kind:'action',text:'⏱ '+cur+' answering ('+t.rem+'s left). Capture each answer with the mic — duplicates buzz automatically.'};
+    if(entered>0 && !allRev) return {kind:'action',text:'Reveal '+cur+'’s answers one at a time: 🗣 “You said…” then 📊 “Survey says…” for each.'};
+    if(entered>0 && allRev){
+      if(p===0) return {kind:'action',text:'✅ '+cur+' done. Now switch to '+fmPNameFor(s,1)+' (Player 2): select Player 2, click ▶ Start, and capture their answers.'};
+      return {kind:'action',text:'✅ All answers revealed — the Win / Aww result shows automatically.'};
+    }
+    if(!t.started) return {kind:'action',text:'💰 Fast Money — '+cur+' (Player '+(p+1)+') is up. When the emcee finishes the intro, click ▶ Start, then turn on the mic and capture the 5 answers.'};
+    return {kind:'action',text:'💰 '+cur+' — turn on the mic and capture the answers, then reveal each one.'};
+  }
+
+  // ----- FACE-OFF -----
+  if(s.view==='faceoff'){
+    const sp=setupPrompt(); if(sp) return sp;
+    if(s.buzz.winner==null) return {kind:'action',text:'🔔 Face-Off, Round '+(s.roundIdx+1)+': '+podName(0)+' ('+A.name+') vs '+podName(1)+' ('+B.name+'). The emcee reads the question — when a team buzzes, tap who buzzed in first.'};
+    return {kind:'action',text:tn(s.buzz.winner)+' buzzed in first — moving to the board…'};
+  }
+
+  // ----- ROUND -----
+  if(s.view==='round'){
+    if(s.awarded){
+      const last=s.roundIdx>=s.rounds.length-1;
+      return {kind:'win',text: last
+        ? '🎉 '+tn(s.awardedTo)+' won the final round! In the pop-up, reveal any remaining answers, then “Declare game winner.”'
+        : '🎉 '+tn(s.awardedTo)+' won Round '+(s.roundIdx+1)+'! In the pop-up, reveal any remaining answers, then “Start Round '+(s.roundIdx+2)+'.”'};
+    }
+    if(s.stealMode) return {kind:'alert',text:'🚨 STEAL — '+tn(s.active)+' get ONE answer. Reveal it to steal the round, or ❌ Strike to award '+tn(s.stealFrom)+'.'};
+    if(s.foPhase){
+      if(s.foReveals.length===0 && !s.foBuzzStruck) return {kind:'action',text:'Input '+podName(s.buzz.winner)+' ('+tn(s.buzz.winner)+')’s face-off answer — REVEAL it on the board (or ❌ Strike if it isn’t up there).'};
+      const other=s.buzz.winner===0?1:0;
+      return {kind:'action',text:'Now input '+podName(other)+' ('+tn(other)+')’s face-off answer — the higher of the two automatically wins control.'};
+    }
+    if(s.faceoffWinner!=null && s.playPass==null) return {kind:'decision',text:'🎯 '+tn(s.faceoffWinner)+' won the face-off — choose PLAY or PASS in the pop-up.'};
+    if(s.active!=null) return {kind:'action',text:'Round '+(s.roundIdx+1)+' — '+curTurnName(s)+' ('+tn(s.active)+') is in control. REVEAL the answer the contestant gives; ❌ Strike on a miss ('+s.strikes+'/3). Clear the board to win automatically.'};
+    return {kind:'neutral',text:'Resolve the face-off (reveal both answers) or use Give Control / Play–Pass to set who plays.'};
+  }
+  return {kind:'neutral',text:''};
+}
 function renderGame(){
   const s=state, r=s.rounds[s.roundIdx], q=bank.main[r.q]||{q:'(no question)',answers:[]};
   const nAns=q.answers.length, shownCount=q.answers.filter((_,i)=>s.revealed[i]).length, hiddenCount=nAns-shownCount;
   const viewBtn=(v,l)=>`<button class="btn big ${s.view===v?'gold':''}" data-act="view|${v}">${l}</button>`;
-  const teams=[0,1].map(i=>{const t=s.teams[i];return `
+  const scoreRows=[0,1].map(i=>{const t=s.teams[i];return `
     <div class="row" style="margin-bottom:10px">
-      <input type="color" value="${esc(t.color)}" data-chg="team-color|${i}">
-      <input type="text" value="${esc(t.name)}" data-chg="team-name|${i}" style="width:160px">
+      <span style="min-width:150px;font-weight:700;color:${esc(t.color)}">${esc(t.name||('Team '+(i+1)))}</span>
       <button class="btn sm" data-act="score|${i}|-5">−5</button>
-      <input type="number" value="${t.score}" data-chg="team-score|${i}" class="scorebox" style="width:90px">
+      <input type="number" value="${t.score}" data-chg="team-score|${i}" class="scorebox" style="width:84px">
       <button class="btn sm" data-act="score|${i}|5">+5</button>
+      <button class="btn sm ${s.active===i?'gold':''}" data-act="setactive|${i}">${s.active===i?'▶ Has Control':'Give Control'}</button>
       ${s.awarded&&s.awardedTo===i
-        ? `<button class="btn red sm" data-act="unaward">↩ Undo award (−${s.pot})</button>`
-        : `<button class="btn green sm" data-act="award|${i}" ${s.pot===0||s.awarded?'disabled':''}>🏆 Award ${s.pot} pts</button>`}
-      <button class="btn sm ${s.active===i?'gold':''}" data-act="setactive|${i}">${s.active===i?'▶ HAS CONTROL':'give control'}</button>
-      <button class="btn sm" data-act="crown|${i}">👑 Crown winner</button>
+        ? `<button class="btn red sm" data-act="unaward">↩ Undo Award (−${s.pot})</button>`
+        : `<button class="btn green sm" data-act="award|${i}" ${s.pot===0||s.awarded?'disabled':''}>Award Points (${s.pot})</button>`}
+      <button class="btn sm" data-act="crownround|${i}">👑 Crown Round Winner</button>
     </div>`;}).join('');
   const ansRows=(q.answers||[]).map((a,i)=>`
     <div class="ansRow ${s.revealed[i]?'revealed':''}">
@@ -984,21 +1117,23 @@ function renderGame(){
       <div class="apts">${a[1]}${r.mult>1?` <span class="mut">×${r.mult}</span>`:''}</div>
       <button class="btn sm ${s.revealed[i]?'':'blue'}" data-act="reveal|${i}">${s.revealed[i]?'Hide ↩':'REVEAL'}</button>
     </div>`).join('');
-  const rosters=[0,1].map(i=>{const t=s.teams[i]; const players=t.players||[]; const pod=(s.podium&&s.podium[i]); const fmSel=t.fmSel||[null,null];
+  const setupCols=[0,1].map(i=>{const t=s.teams[i]; const players=t.players||[]; const pod=(s.podium&&s.podium[i]); const fmSel=t.fmSel||[null,null];
     const rows=players.map((nm,pi)=>`
       <div class="row" style="margin-bottom:4px">
         <span class="mut" style="width:20px">${pi+1}</span>
-        <input type="text" value="${esc(nm)}" placeholder="player ${pi+1} name" data-chg="player|${i}|${pi}" style="width:170px">
-        <button class="btn sm ${pod===pi?'gold':''}" data-act="podium|${i}|${pi}" title="mark this player at the face-off podium">${pod===pi?'▶ Podium':'Podium'}</button>
-        <button class="btn sm ${fmSel[0]===pi?'gold':''}" data-act="fmdesignate|${i}|0|${pi}" title="Fast Money Player 1 if this team wins">FM1</button>
-        <button class="btn sm ${fmSel[1]===pi?'gold':''}" data-act="fmdesignate|${i}|1|${pi}" title="Fast Money Player 2 if this team wins">FM2</button>
-        <button class="btn sm" data-act="player-del|${i}|${pi}" ${players.length<=3?'disabled':''} title="remove">✕</button>
+        <input type="text" value="${esc(nm)}" placeholder="player ${pi+1} name" data-chg="player|${i}|${pi}" style="width:160px">
+        <button class="btn sm ${pod===pi?'gold':''}" data-act="podium|${i}|${pi}" tabindex="-1" title="at the face-off podium">${pod===pi?'▶ Podium':'Podium'}</button>
+        <button class="btn sm ${fmSel[0]===pi?'gold':''}" data-act="fmdesignate|${i}|0|${pi}" tabindex="-1" title="Fast Money Player 1 if this team wins">FM1</button>
+        <button class="btn sm ${fmSel[1]===pi?'gold':''}" data-act="fmdesignate|${i}|1|${pi}" tabindex="-1" title="Fast Money Player 2 if this team wins">FM2</button>
+        <button class="btn sm" data-act="player-del|${i}|${pi}" ${players.length<=3?'disabled':''} tabindex="-1" title="remove">✕</button>
       </div>`).join('');
-    return `<div style="flex:1;min-width:330px">
+    return `<div style="flex:1;min-width:340px">
       <div class="row" style="margin-bottom:6px">
-        <span style="font-weight:700;color:${esc(t.color)}">${esc(t.name)} <span class="mut">(${players.length}/5)</span></span>
+        <input type="color" value="${esc(t.color)}" data-chg="team-color|${i}" tabindex="-1" title="team color">
+        <span class="tnameWrap"><input type="text" value="${esc(t.name)}" data-chg="team-name|${i}" placeholder="Team ${i+1}" style="width:170px;font-weight:700;padding-right:22px"><button class="tnameX" data-act="team-name-clear|${i}" tabindex="-1" title="clear">✕</button></span>
+        <span class="mut">(${players.length}/5)</span>
         <span class="spacer" style="flex:1"></span>
-        <button class="btn sm" data-act="players-clear|${i}">🧹 Clear players</button>
+        <button class="btn sm" data-act="players-clear|${i}" tabindex="-1">🧹 Clear</button>
       </div>
       ${rows}
       <div class="row" style="margin-top:4px">
@@ -1008,36 +1143,31 @@ function renderGame(){
   const roundBtns=s.rounds.map((rd,i)=>`<button class="btn ${i===s.roundIdx?'gold':''}" data-act="round|${i}">R${i+1}<span class="mut" style="margin-left:6px">${multLabel(rd.mult).toLowerCase()}</span></button>`).join('');
   const qOpts=bank.main.map((qq,i)=>`<option value="${i}" ${i===r.q?'selected':''}>${esc(qq.q.slice(0,70))}</option>`).join('');
   $('#tab-game').innerHTML=`
-  <div class="card"><h2>Teams &amp; scores</h2>${teams}
-    <div class="row" style="margin-top:6px">
-      <button class="btn gold big" data-act="declarewinner">🏆 End game — crown the team with the most points</button>
-      <span class="mut">Main game is 5 rounds; the winner is whoever has the most points after them. (Use 👑 on a team to override.)</span>
+  <div class="card"><h2>Teams &amp; Players — setup</h2>
+    <div class="row" style="align-items:flex-start;gap:24px">${setupCols}</div>
+    <div class="mut" style="margin-top:8px">Enter team names, colors and 3–5 players here — this is the only place to edit them; the names show (locked) in Teams &amp; scores below. <b>Podium</b> = who's at the face-off (auto-advances each round). <b>FM1 / FM2</b> pre-pick the Fast Money pair that auto-loads if this team wins.</div>
+  </div>
+  <div class="card"><h2>Teams &amp; scores</h2>
+    <div class="row" style="align-items:center;gap:16px">
+      <div style="flex:1">${scoreRows}</div>
+      <button class="btn sm" data-act="endgame-confirm" title="Ends the entire game and crowns the highest score">🏁 End Game</button>
     </div>
   </div>
-  <div class="card"><h2>Players / rosters (3–5 per team · shown on the host screen)</h2>
-    <div class="row" style="align-items:flex-start;gap:24px">${rosters}</div>
-    <div class="mut" style="margin-top:8px">Names appear on the emcee's host panel. <b>Podium</b> marks who's facing off. <b>FM1 / FM2</b> pre-pick this team's two Fast Money players — if they win, those names auto-load into the Fast Money module (you can also load/override them there).</div>
-  </div>
-  <div class="card"><h2>Buzz-in (your buzzer system tells you who hit first — press the button)</h2>
+  <div class="card"><h2>Buzz-in (press who hit first)</h2>
     <div class="row" style="margin-bottom:8px">
-      <button class="btn big" style="background:${esc(s.teams[0].color)};border-color:${esc(s.teams[0].color)};flex:1" data-act="buzzmanual|0">🔔 ${esc(s.teams[0].name)} BUZZED FIRST</button>
-      <button class="btn big" style="background:${esc(s.teams[1].color)};border-color:${esc(s.teams[1].color)};flex:1" data-act="buzzmanual|1">🔔 ${esc(s.teams[1].name)} BUZZED FIRST</button>
+      <button class="btn big" style="background:${esc(s.teams[0].color)};border-color:${esc(s.teams[0].color)};flex:1" data-act="buzzmanual|0">🔔 ${esc(s.teams[0].name||'Team 1')} BUZZED FIRST</button>
+      <button class="btn big" style="background:${esc(s.teams[1].color)};border-color:${esc(s.teams[1].color)};flex:1" data-act="buzzmanual|1">🔔 ${esc(s.teams[1].name||'Team 2')} BUZZED FIRST</button>
     </div>
-    <div class="row" style="margin-bottom:8px">
+    <div class="row">
       <span class="mut">buzzed in:</span>
       <span class="bigStat">${s.buzz.winner!=null?esc(s.teams[s.buzz.winner].name):'—'}</span>
       <button class="btn sm" data-act="buzzreset">Reset</button>
       <span class="spacer" style="flex:1"></span>
       <button class="btn ${s.buzz.armed?'green toggled':''} sm" data-act="arm">${s.buzz.armed?'🔓 auto-buzz ARMED':'🔒 arm auto-buzz (connected buzzers)'}</button>
     </div>
-    <div class="row">
-      <span class="mut">Face-off won by (top answer) →</span>
-      <button class="btn" style="background:${esc(s.teams[0].color)};border-color:${esc(s.teams[0].color)}" data-act="faceoffwin|0">🏆 ${esc(s.teams[0].name)}</button>
-      <button class="btn" style="background:${esc(s.teams[1].color)};border-color:${esc(s.teams[1].color)}" data-act="faceoffwin|1">🏆 ${esc(s.teams[1].name)}</button>
-      <span class="mut">→ pops Play / Pass${s.playPass?` · chose to ${s.playPass.toUpperCase()}`:''}</span>
-    </div>
   </div>
   <div class="card"><h2>Round ${s.roundIdx+1} — board control</h2>
+    <div class="qBig">${esc(q.q||'(no question selected)')}</div>
     <div class="row" style="margin-bottom:8px">${roundBtns}
       <span class="mut">multiplier</span>
       <select data-chg="round-mult">${[1,2,3].map(m=>`<option value="${m}" ${r.mult===m?'selected':''}>×${m} ${multLabel(m).toLowerCase()}</option>`).join('')}</select>
@@ -1054,7 +1184,8 @@ function renderGame(){
     <div class="row" style="margin-bottom:8px">
       <button class="btn red big" data-act="strike">❌ STRIKE</button>
       <span class="bigStat" style="color:#ff6b70">${'X'.repeat(s.strikes)||'—'}</span>
-      <button class="btn sm" data-act="clearstrikes">Clear strikes</button>
+      <button class="btn sm" data-act="clearlaststrike" ${s.strikes===0&&!s.stealMode?'disabled':''}>Clear Last Strike</button>
+      <button class="btn sm" data-act="clearstrikes">Clear All Strikes</button>
     </div>
     ${ansRows||'<div class="mut">No answers — pick a question.</div>'}
   </div>
@@ -1094,12 +1225,13 @@ function fmRosterOpts(){
     return `<optgroup label="${esc(t.name)}">`+ps.map(n=>`<option value="${esc(n.trim())}">${esc(n.trim())}</option>`).join('')+`</optgroup>`;
   }).join('');
 }
-function fmAllShown(){ // every answered cell has had its points revealed
-  let any=false;
-  for(const c of state.fm.cells) for(let p=0;p<2;p++){
-    if((c.ans[p]||'').trim()){ any=true; if(!c.ptsShown[p]) return false; }
+function fmGameComplete(){ // BOTH players have answered and all their answers are revealed
+  let p1=false,p2=false;
+  for(const c of state.fm.cells){
+    if((c.ans[0]||'').trim()){ p1=true; if(!c.ptsShown[0]) return false; }
+    if((c.ans[1]||'').trim()){ p2=true; if(!c.ptsShown[1]) return false; }
   }
-  return any;
+  return p1 && p2;   // not complete until Player 2 has gone and everything is shown
 }
 function renderFMTab(){
   const fm=state.fm;
@@ -1155,7 +1287,7 @@ function renderFMTab(){
       <button class="btn" data-act="fm-timer|reset">↺ Reset</button>
       <span class="spacer" style="flex:1"></span>
       ${micReady?'':'<button class="btn gold" data-act="mic-enable">🎤 Enable mic (once)</button>'}
-      <button class="btn ${rec?'red toggled':'gold'} big" data-act="fm-dictate">${rec?'● Listening — say "Number 1 …, Number 2 …" (click to stop)':'🎤 Dictate answers ('+esc(fmPName(fm.stage))+')'}</button>
+      <button class="btn ${rec?'red toggled':'gold'} big" data-act="fm-dictate">${rec?('🔴 Listening — say Answer '+(Math.min(micSeq,4)+1)+' (click to stop)'):'🎤 Capture answers ('+esc(fmPName(fm.stage))+')'}</button>
     </div>
     <div class="mut" style="margin-bottom:8px">Flow — <b>during the run:</b> start the timer for ${esc(fmPName(fm.stage))}. <b>To capture answers:</b> hit 🎤 Dictate, then say <i>"Number 1 {answer}, Number 2 {answer} …"</i> through 5, then click to stop — the answers fill in automatically and exact survey matches auto-fill their points. (The single 🎤 by any answer re-captures just that one.) <b>After:</b> review and make any manual changes. <b>Reveal ceremony:</b> 🗣 <i>"You said…"</i> flips the answer, then 📊 <i>"Survey says…"</i> flips the points. <b>Duplicates</b> auto-buzz; use <b>DUP</b> for close calls.</div>
   </div>
@@ -1167,7 +1299,6 @@ function renderFMTab(){
       <button class="btn ${fm.result?'toggled ':''}gold big" data-act="fm-result">🏁 Reveal result</button>
       <label class="mut"><input type="checkbox" ${fm.autoResult?'checked':''} data-chg="fm-autoresult"> auto</label>
       ${fm.result?`<span class="bigStat" style="color:${fm.result==='win'?'#7ee08a':'#9fb0d0'}">${fm.result==='win'?'WON 🎉':'Aww…'}</span><button class="btn sm" data-act="fm-result-clear">clear</button>`:''}
-      <button class="btn green big" data-act="fm-celebrate">🎉 Celebrate</button>
     </div>
   </div>
   <div class="card"><h2>Question slots (pick 5 before the round)</h2>${sel}
@@ -1246,30 +1377,37 @@ function startCapture(slot,p){
 /* DICTATION: open the mic once and say "Number 1 {answer}, Number 2 {answer} …"
    through 5. The spoken numbers split the transcript into the five answer slots
    for the current player; exact survey matches auto-fill their points. */
-const NUMW={one:1,two:2,three:3,four:4,five:5,'1':1,'2':2,'3':3,'4':4,'5':5,won:1,to:2,too:2,for:4};
-let dictBuf='';
-function parseDictation(transcript,stage){
-  const re=/\b(?:number|answer|#)\s+(one|two|three|four|five|won|to|too|for|[1-5])\b/gi;
-  const marks=[]; let m;
-  while((m=re.exec(transcript))){ const n=NUMW[m[1].toLowerCase()]; if(n) marks.push({n,end:re.lastIndex,start:m.index}); }
-  for(let k=0;k<marks.length;k++){
-    const n=marks[k].n; const from=marks[k].end; const to=(k+1<marks.length)?marks[k+1].start:transcript.length;
-    let ans=transcript.slice(from,to).trim().replace(/^[-:,\s]+/,'').replace(/[.,!?;:]+$/,'').trim();
-    if(ans && n>=1 && n<=5){ const c=state.fm.cells[n-1]; c.ans[stage]=ans; if(!fmCheckDup(n-1)) fmAutoPoints(n-1,stage); }
-  }
-}
+/* HANDS-FREE SEQUENTIAL DICTATION: turn the mic on once and just say the five
+   answers in order (no "Number 1…" needed). Each spoken phrase fills the next
+   slot for the current player; a duplicate buzzes immediately and stays on the
+   same slot for a re-answer. The button shows which answer is expected next. */
+let micSeq=0;
 function startDictation(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert('Speech recognition needs Google Chrome (and an internet connection). You can still type answers.');return;}
-  if(rec){ try{rec.stop();}catch(e){} return; }   // already live -> toggle off (parses what was said)
-  const stage=state.fm.stage; dictBuf='';
-  rec=new SR(); rec.lang=config.lang||'en-US'; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
-  micState={dict:true};
+  if(rec){ try{rec.stop();}catch(e){} return; }   // already live -> toggle off
+  const stage=state.fm.stage;
+  micSeq=state.fm.cells.findIndex(c=>!(c.ans[stage]||'').trim()); if(micSeq<0)micSeq=0;
+  rec=new SR(); rec.lang=config.lang||'en-US'; rec.continuous=true; rec.interimResults=false; rec.maxAlternatives=1;
+  micState={q:micSeq,p:stage};
   rec.onstart=()=>{ micReady=true; renderFMTab(); };
   rec.onresult=ev=>{
-    let finals='', interim='';
-    for(let i=0;i<ev.results.length;i++){ const t=ev.results[i][0].transcript; if(ev.results[i].isFinal) finals+=' '+t; else interim+=' '+t; }
-    parseDictation((finals+' '+interim).trim(), stage); pushState();
+    for(let i=ev.resultIndex;i<ev.results.length;i++){
+      if(!ev.results[i].isFinal) continue;
+      const txt=(ev.results[i][0].transcript||'').trim().replace(/[.,!?;:]+$/,'').trim();
+      if(!txt || micSeq>4) continue;
+      const slot=micSeq, c=state.fm.cells[slot];
+      c.ans[stage]=txt;
+      if(fmCheckDup(slot)){            // duplicate: buzzer already fired, cell cleared — retry same slot
+        micState={q:slot,p:stage};
+      }else{
+        fmAutoPoints(slot,stage);
+        micSeq=slot+1;
+        micState = micSeq<=4 ? {q:micSeq,p:stage} : null;
+      }
+      pushState();
+      if(micSeq>4){ try{rec.stop();}catch(e){} }
+    }
   };
   rec.onerror=ev=>{ if(ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed')){ micReady=false; alert('Microphone permission was blocked.\nAllow it from Chrome\'s address bar, or run the game via the localhost launcher.'); } };
   rec.onend=()=>{ rec=null; micState=null; pushState(); };
@@ -1297,6 +1435,7 @@ function buzzTrigger(i){
 /* Resolve the face-off in favor of team w: shift control to them and pop Play/Pass. */
 function decideFaceoff(w){
   state.foPhase=false; state.faceoffWinner=w; state.playPass=null; state.active=w;
+  state.turn=(state.podium&&state.podium[w])||0;   // first to answer = the podium (face-off) player
   sfx('ding'); pushState(); if(MODE==='admin') openPP();
 }
 function keyLabel(code){ return code.replace(/^Key|^Digit|^Numpad/,''); }
@@ -1352,7 +1491,7 @@ async function hidConnect(sonyOnly){
 if(MODE==='admin'&&navigator.hid){ try{navigator.hid.getDevices().then(ds=>{ds.forEach(openHidDevice);renderSetup();});}catch(e){} }
 
 /* ---------- HOST SCRIPTS TAB ---------- */
-const SCRIPT_SEGS=[['idle','Welcome / Idle'],['faceoff_pre','Face-Off — before buzz'],['faceoff_post','Face-Off — after buzz-in'],['faceoff_decide','Face-Off — Play / Pass decision'],['round_play','Round — in play'],['round_steal','Round — steal (after 3 strikes)'],['round_awarded','Round — winners announced'],['fm_intro','Fast Money — intro / in progress'],['fm_win','Fast Money — reached target (win)'],['fm_lose','Fast Money — fell short'],['winner','Champions / end of game']];
+const SCRIPT_SEGS=[['idle','Welcome / Idle'],['faceoff_pre','Face-Off — before buzz'],['faceoff_post','Face-Off — after buzz-in'],['faceoff_decide','Face-Off — Play / Pass decision'],['round_play','Round — in play'],['round_steal','Round — steal (after 3 strikes)'],['round_awarded','Round — winners announced'],['fm_intro','Fast Money — Player 1 intro / in progress'],['fm_p2','Fast Money — Player 2 intro (duplicate warning)'],['fm_win','Fast Money — reached target (win)'],['fm_lose','Fast Money — fell short'],['winner','Champions / end of game']];
 function renderScripts(){
   const sc=getScripts();
   const cards=SCRIPT_SEGS.map(([k,label])=>`
@@ -1644,20 +1783,42 @@ const ACT={
   faceoffwin(a){ decideFaceoff(+a[0]); },
   playpass(a){ const win=state.faceoffWinner; if(win==null)return; const dec=a[0];
     state.playPass=dec; state.active = dec==='play' ? win : (win===0?1:0);
+    // the podium player already gave the face-off answer, so board play starts with the NEXT player
+    const n=Math.max(1,(state.teams[state.active].players||[]).length);
+    state.turn = (((state.podium&&state.podium[state.active])||0)+1) % n;
     state.view='round'; closePP(); pushState(); },
   crown(a){ const i=+a[0]; if(!confirm(`Crown ${state.teams[i].name} the winner?`))return;
     state.winner=i; loadFMfromTeam(i); state.view='winner'; sfx('win'); pushState(); },
+  crownround(a){ const i=+a[0]; if(state.awarded)return;   // manually declare this team the round winner
+    state.teams[i].score+=state.pot; state.awarded=true; state.awardedTo=i; sfx('award'); pushState(); },
   'nextround'(){ closeRoundEnd();
     const ni=Math.min(state.rounds.length-1,state.roundIdx+1);
     ACT.round([ni]);                       // advance round, auto-advance podium, reset board
     state.view='faceoff'; state.buzz={armed:true,winner:null};
-    if(MODE==='admin') switchTab('game');  // return the control panel to the Game / Face-Off tab
+    if(MODE==='admin'){ switchTab('game'); try{window.scrollTo({top:0,behavior:'smooth'});}catch(e){window.scrollTo(0,0);} }  // back to Game tab, scrolled up so the buzzers show
     pushState(); },
   'round-end-close'(){ closeRoundEnd(); },
-  declarewinner(){ closeRoundEnd(); const a=state.teams[0].score, b=state.teams[1].score;
-    if(a===b){ alert(`It's a tie — ${a} points each. Play a tiebreaker, then use 👑 Crown winner to choose.`); return; }
-    const i=a>b?0:1;
-    if(!confirm(`End the game and crown ${state.teams[i].name} with ${state.teams[i].score} points (most points after the rounds)?`))return;
+  'endgame-confirm'(){
+    // Non-modal in-page confirmation (no window.confirm() — a modal steals focus and,
+    // with the scoreboard full-screen on a 2nd display, switches macOS away from it).
+    const old=document.getElementById('endGameConfirm'); if(old)old.remove();
+    const x=state.teams[0].score, y=state.teams[1].score, tie=(x===y), i=x>y?0:1;
+    const card=document.createElement('div'); card.id='endGameConfirm';
+    card.style.cssText='position:fixed;z-index:99999;left:50%;top:14px;transform:translateX(-50%);max-width:540px;background:#15203a;border:2px solid #c0392b;border-radius:12px;padding:14px 16px;box-shadow:0 14px 50px rgba(0,0,0,.55);color:#fff;font-size:15px;line-height:1.4';
+    card.innerHTML = tie
+      ? '<b>It’s a tie — '+x+' points each.</b><br>Play a tiebreaker, then use 👑 Crown Round Winner to choose the champion.<div style="margin-top:12px;text-align:right"><button class="btn sm" data-act="endgame-cancel">OK</button></div>'
+      : '⚠ <b>End the entire game?</b><br>This crowns <b>'+esc(state.teams[i].name||('Team '+(i+1)))+'</b> ('+state.teams[i].score+' pts — highest score) as champion, who then plays Fast Money. Normally automatic after Round 5.<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" data-act="endgame-cancel">Cancel</button><button class="btn sm gold" data-act="declarewinner|final">🏁 End game & crown</button></div>';
+    document.body.appendChild(card);
+  },
+  'endgame-cancel'(){ const c=document.getElementById('endGameConfirm'); if(c)c.remove(); },
+  declarewinner(a){ const c=document.getElementById('endGameConfirm'); if(c)c.remove(); closeRoundEnd(); const final = a && a[0]==='final'; const x=state.teams[0].score, y=state.teams[1].score;
+    if(x===y){ alert(`It's a tie — ${x} points each. Play a tiebreaker, then use 👑 Crown Round Winner / Crown to choose.`); return; }
+    const i=x>y?0:1;
+    // No confirm() on the natural end-of-game declare (from the round-end pop-up): a modal
+    // dialog steals focus and, with the scoreboard in full-screen on a 2nd display, pulls
+    // macOS to the admin's Space — making the board look like it minimized. The manual
+    // "End Game" button still confirms (it can be pressed mid-game).
+    if(!final){ if(!confirm(`⚠ END THE ENTIRE GAME?\n\nThis crowns ${state.teams[i].name} (${state.teams[i].score} pts — the highest score) as the champion, who then plays Fast Money. This is normally automatic at the end of Round 5. Continue?`))return; }
     state.winner=i; loadFMfromTeam(i); state.view='winner'; sfx('win'); pushState(); },
   score(a){ state.teams[+a[0]].score=Math.max(0,state.teams[+a[0]].score + +a[1]); pushState(); },
   strike(){
@@ -1680,11 +1841,17 @@ const ACT={
     if(state.strikes>=3 && state.active!=null){   // three strikes -> hand to the other team to steal
       const other=state.active===0?1:0;
       state.stealMode=true; state.stealFrom=state.active; state.active=other;
-    }
+      state.turn=(state.podium&&state.podium[other])||0;
+    } else if(state.active!=null){ advanceTurn(state); }   // a miss passes to the next player
     pushState(); },
   clearstrikes(){ state.strikes=0; state.stealMode=false; state.stealFrom=null; pushState(); },
+  clearlaststrike(){
+    if(state.stealMode){ state.stealMode=false; if(state.stealFrom!=null)state.active=state.stealFrom; state.stealFrom=null; state.strikes=2; }
+    else state.strikes=Math.max(0,state.strikes-1);
+    pushState(); },
   reveal(a){ const i=+a[0], r=state.rounds[state.roundIdx], q=bank.main[r.q];
     if(!q||!q.answers[i])return;
+    const wasSteal=state.stealMode, wasFo=state.foPhase;
     const pts=(+q.answers[i][1]||0)*r.mult;
     if(state.revealed[i]){ state.revealed[i]=false; if(!state.awarded)state.pot=Math.max(0,state.pot-pts); pushState(); return; }
     state.revealed[i]=true; if(!state.awarded)state.pot+=pts; sfx('ding');
@@ -1704,6 +1871,7 @@ const ACT={
       // normal play: the controlling team cleared the whole board -> they win the round
       const w=state.active; state.teams[w].score+=state.pot; state.awarded=true; state.awardedTo=w; setTimeout(()=>sfx('award'),500);
     }
+    if(!wasSteal && !wasFo && state.active!=null) advanceTurn(state);   // pass to the next player after each answer
     pushState(); },
   revealall(){ const r=state.rounds[state.roundIdx], q=bank.main[r.q]; if(!q)return;
     // end-of-round reveal: shows remaining answers WITHOUT adding to the pot (pot stays awardable)
@@ -1715,13 +1883,14 @@ const ACT={
     let pick=-1, best=Infinity;
     q.answers.forEach((a,idx)=>{ if(!state.revealed[idx]){ const p=+a[1]||0; if(p<=best){best=p;pick=idx;} } });
     if(pick<0)return;
-    state.revealed[pick]=true; sfx('ding'); pushState(); },
+    state.revealed[pick]=true; sfx('ding'); pushState();
+    const ov=$('#roundEndOv'); if(ov && !ov.classList.contains('hidden')) openRoundEnd(); },
   award(a){ const i=+a[0]; if(state.pot===0||state.awarded)return;
     state.teams[i].score+=state.pot; state.awarded=true; state.awardedTo=i; sfx('award'); pushState(); },
   unaward(){ if(!state.awarded||state.awardedTo==null)return;
     const i=state.awardedTo; state.teams[i].score=Math.max(0,state.teams[i].score-state.pot);
     state.awarded=false; state.awardedTo=null; pushState(); },
-  resetround(){ state.revealed=Array(8).fill(false); state.pot=0; state.awarded=false; state.awardedTo=null; state.strikes=0; state.stealMode=false; state.stealFrom=null; state.foPhase=false; state.foBuzz=null; state.foReveals=[]; state.foBuzzStruck=false; state.faceoffWinner=null; state.playPass=null; pushState(); },
+  resetround(){ state.revealed=Array(8).fill(false); state.pot=0; state.awarded=false; state.awardedTo=null; state.strikes=0; state.stealMode=false; state.stealFrom=null; state.foPhase=false; state.foBuzz=null; state.foReveals=[]; state.foBuzzStruck=false; state.faceoffWinner=null; state.playPass=null; state.turn=0; pushState(); },
   round(a){ state.roundIdx=+a[0];
     // auto-advance the podium player by round (Player 1→R1, Player 2→R2…, wraps by roster size)
     if(!state.podium)state.podium=[0,0];
@@ -1738,6 +1907,7 @@ const ACT={
     pushState(); renderGame(); },   // names load into Fast Money only when this team wins
   'fm-loadteam'(a){ loadFMfromTeam(+a[0]); pushState(); },
   'players-clear'(a){ if(!confirm('Clear all player names for this team?'))return; state.teams[+a[0]].players=['','','']; if(state.podium)state.podium[+a[0]]=0; pushState(); renderGame(); },
+  'team-name-clear'(a){ state.teams[+a[0]].name=''; pushState(); renderGame(); },
   buzzmanual(a){ state.buzz.armed=true; state.buzz.winner=null; buzzTrigger(+a[0]); },
   buzzreset(){ state.buzz={armed:false,winner:null}; pushState(); },
   sound(a){ sfx(a[0]); },
@@ -1754,8 +1924,11 @@ const ACT={
   'fm-pts-reveal'(a){ const c=state.fm.cells[+a[0]]; const p=+a[1];
     c.ptsShown[p]=!c.ptsShown[p];
     if(c.ptsShown[p]) sfx((Number(c.pts[p])||0)>0 ? 'ding' : 'fmzero');
-    if(state.fm.autoResult && !state.fm.result && fmAllShown()){
-      const win=fmTotal()>=config.target; state.fm.result=win?'win':'lose'; sfx(win?'win':'lose');
+    if(state.fm.autoResult && !state.fm.result){
+      // WIN the moment 200 is reached (even during Player 1); LOSE only once both
+      // players are done and all answers are scored without reaching the target.
+      if(fmTotal()>=config.target){ state.fm.result='win'; sfx('win'); }
+      else if(fmGameComplete()){ state.fm.result='lose'; sfx('lose'); }
     }
     pushState(); },
   'fm-dup'(a){ const c=state.fm.cells[+a[0]],p=+a[1]; sfx('duplicate');
@@ -1805,10 +1978,10 @@ const ACT={
     location.reload(); }
 };
 const CHG={
-  'team-name'(a,el){ state.teams[+a[0]].name=el.value.trim()||('Team '+(+a[0]+1)); pushState(); },
+  'team-name'(a,el){ state.teams[+a[0]].name=el.value; pushQuiet(); },   // allow blank (placeholder); quiet = keeps Tab/focus
   'team-color'(a,el){ state.teams[+a[0]].color=el.value; pushState(); },
-  'team-score'(a,el){ state.teams[+a[0]].score=Math.max(0,Math.round(+el.value||0)); pushState(); },
-  'player'(a,el){ const t=state.teams[+a[0]]; if(!t.players)t.players=[]; t.players[+a[1]]=el.value; pushState(); },
+  'team-score'(a,el){ state.teams[+a[0]].score=Math.max(0,Math.round(+el.value||0)); pushQuiet(); },
+  'player'(a,el){ const t=state.teams[+a[0]]; if(!t.players)t.players=[]; t.players[+a[1]]=el.value; pushQuiet(); },
   'round-mult'(a,el){ state.rounds[state.roundIdx].mult=+el.value; pushState(); },
   'round-q'(a,el){ state.rounds[state.roundIdx].q=+el.value; ACT.resetround(); },
   showq(a,el){ state.showQ=el.checked; pushState(); },
@@ -1850,10 +2023,15 @@ function openRoundEnd(){
   const how = state.stealFrom!=null ? ' (steal!)' : '';
   $('#reTitle').textContent='🎉 '+w.name+' win Round '+(state.roundIdx+1)+'!'+how;
   $('#reMsg').textContent='+'+state.pot+' points. Score now — '+A.name+': '+A.score+'  ·  '+B.name+': '+B.score+'.';
+  const r=state.rounds[state.roundIdx], q=bank.main[r.q]||{answers:[]};
+  const hidden=(q.answers||[]).filter((_,i)=>!state.revealed[i]).length;
   const last = state.roundIdx>=state.rounds.length-1;
-  $('#reBtns').innerHTML = last
-    ? '<button class="btn gold big" data-act="declarewinner">🏆 Declare game winner</button><button class="btn" data-act="round-end-close">Close</button>'
-    : '<button class="btn gold big" data-act="nextround">▶ Start Round '+(state.roundIdx+2)+'</button><button class="btn" data-act="round-end-close">Close</button>';
+  $('#reBtns').innerHTML =
+    '<button class="btn '+(hidden?'gold':'')+'" data-act="revealnext" '+(hidden?'':'disabled')+'>▶ Reveal Next Answer'+(hidden?' ('+hidden+' left)':'')+'</button>'
+    + (last
+        ? '<button class="btn gold big" data-act="declarewinner|final">🏆 Declare game winner</button>'
+        : '<button class="btn gold big" data-act="nextround">▶ Start Round '+(state.roundIdx+2)+'</button>')
+    + '<button class="btn" data-act="round-end-close">Close</button>';
   ov.classList.remove('hidden');
 }
 function closeRoundEnd(){ const ov=$('#roundEndOv'); if(ov)ov.classList.add('hidden'); }
@@ -1884,6 +2062,18 @@ function hostShortcut(code,e){
   if(m){ ACT.reveal([+m[1]-1]); return true; }
   return false;
 }
+// delegated collapse toggle — reliable across re-renders
+document.addEventListener('click',e=>{
+  if(MODE!=='admin')return;
+  const h2=e.target.closest('h2'); if(!h2)return;
+  const card=h2.parentElement; if(!card||!card.classList.contains('card')||card.querySelector(':scope > h2')!==h2)return;
+  if(!h2.closest('[id^="tab-"]'))return;
+  const key=collapseScope()+'|'+collapseKey(h2.textContent);
+  const now=!card.classList.contains('collapsed');
+  card.classList.toggle('collapsed',now);
+  if(!config.collapsed)config.collapsed={};
+  config.collapsed[key]=now; saveConfig();
+});
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]'); if(!el)return;
   const parts=el.dataset.act.split('|');
