@@ -500,7 +500,8 @@ const DEFAULT_SCRIPTS={
  idle:
 `Welcome to {game}! I'm your host — let's have some fun.
 Tonight it's {teamA} taking on {teamB}. Let's meet our players!
->Introduce each team, then bring one player from each team up to the face-off podium.`,
+{captainA}, introduce your team! …And {captainB}, introduce yours!
+>Have each team captain introduce their team, then bring one player from each team up to the face-off podium.`,
  faceoff_pre:
 `It's time for the Face-Off! {podiumA} and {podiumB} — hands on your buzzers.
 We surveyed 100 people and the top {nAnswers} answers are on the board.
@@ -1064,6 +1065,8 @@ function scriptVars(s){
     control: ctrl?ctrl.name:'the team in control', awarded: aw?aw.name:'the team',
     question:q.q||'…', nAnswers:(q.answers||[]).length, revealed:shown, pot:s.pot, strikes:s.strikes,
     podiumA:podiumName(s,0), podiumB:podiumName(s,1),
+    captainA: (((s.teams[0].players||[])[0]||'').trim()) || ((A.name||'Team 1')+' captain'),
+    captainB: (((s.teams[1].players||[])[0]||'').trim()) || ((B.name||'Team 2')+' captain'),
     buzzPlayer:(s.buzz&&s.buzz.winner!=null)?podiumName(s,s.buzz.winner):'', buzzTeam:bw?bw.name:'',
     faceoffWinner:(s.faceoffWinner!=null)?s.teams[s.faceoffWinner].name:'', stealFrom:(s.stealFrom!=null)?s.teams[s.stealFrom].name:'',
     p1:fmPNameFor(s,0), p2:fmPNameFor(s,1), t1:config.t1, t2:config.t2,
