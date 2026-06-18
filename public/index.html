@@ -1495,6 +1495,7 @@ function renderGame(){
       ${['ding','strike','buzzin','duplicate','fmzero','award','timesup','win','lose','theme'].map(n=>`<button class="btn sm" data-act="sound|${n}">${n}</button>`).join('')}
     </div>
   </div>`;
+  applyCollapsible();   // keep collapsed boxes collapsed after a direct re-render (e.g. FM1/FM2 clicks)
 }
 
 /* ---------- FAST MONEY TAB ---------- */
@@ -1601,7 +1602,7 @@ function renderFMTab(){
     <button class="btn sm" data-act="fm-reset">↺ Reset Fast Money board</button>
   </div>`;
   if(focusId){const el=document.getElementById(focusId); if(el){el.focus(); try{el.setSelectionRange(selS,selE)}catch(e){}}}
-  setFMStickyTop();
+  setFMStickyTop(); applyCollapsible();
 }
 function setFMStage(p){
   const fm=state.fm; fm.stage=p;
@@ -1986,6 +1987,7 @@ function renderBank(){
     </div>
     ${list('main','Main round questions')}${list('fast','Fast Money questions')}`;
   if(sbFocused){ const n=document.getElementById('bankSearch'); if(n){ n.focus(); try{n.setSelectionRange(selS,selS)}catch(e){} } }
+  applyCollapsible();
 }
 function editForm(name,i){
   const d=editing.draft;
@@ -2220,8 +2222,9 @@ const ACT={
     if(state.podium&&state.podium[+a[0]]>=t.players.length) state.podium[+a[0]]=0; pushState(); renderGame(); } },
   'podium'(a){ if(!state.podium)state.podium=[0,0]; const ni=+a[1]; const changed=state.podium[+a[0]]!==ni; state.podium[+a[0]]=ni; if(changed)sfx('swap'); pushState(); },
   'fmdesignate'(a){ const t=state.teams[+a[0]]; if(!t.fmSel)t.fmSel=[null,null]; const slot=+a[1], pidx=+a[2];
-    t.fmSel[slot]=(t.fmSel[slot]===pidx?null:pidx);
-    pushState(); renderGame(); },   // names load into Fast Money only when this team wins
+    if(t.fmSel[slot]===pidx){ t.fmSel[slot]=null; }      // tapping the same button toggles it off
+    else { t.fmSel[slot]=pidx; const other=slot===0?1:0; if(t.fmSel[other]===pidx) t.fmSel[other]=null; }  // can't be both FM1 and FM2
+    pushState(); },   // names load into Fast Money only when this team wins
   'fm-loadteam'(a){ loadFMfromTeam(+a[0]); pushState(); },
   'players-clear'(a){ if(!confirm('Clear all player names for this team?'))return; const t=state.teams[+a[0]]; t.players=['','','']; t.fmSel=[null,null]; if(state.podium)state.podium[+a[0]]=0; pushState(); renderGame(); },
   'team-name-clear'(a){ state.teams[+a[0]].name=''; pushState(); renderGame(); },
