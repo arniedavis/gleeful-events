@@ -791,13 +791,15 @@ const CUES=[
   {k:'swap',label:'Player exchange / podium swap',cat:'music'},
   {k:'roundchange',label:'Round transition',cat:'music'},
   {k:'gamewin',label:'Win the game (champions)',cat:'music'},
+  {k:'fmp2',label:'Fast Money — Player 2 entrance music',cat:'music'},
   {k:'fmclock',label:'Fast Money clock (plays while the timer counts down)',cat:'music'},
+  {k:'yousaid',label:'Fast Money — "You said…" reveal',cat:'sfx'},
   {k:'timesup',label:'Fast Money — time’s up',cat:'sfx'},
   {k:'fmzero',label:'Fast Money — no match',cat:'sfx'},
   {k:'fmwin',label:'Fast Money — WIN',cat:'music'},
   {k:'lose',label:'Fast Money — loss',cat:'music'}
 ];
-const MUSIC_CUES=new Set(['theme','swap','roundchange','gamewin','fmclock','fmwin','lose']);
+const MUSIC_CUES=new Set(['theme','swap','roundchange','gamewin','fmp2','fmclock','fmwin','lose']);
 let AUDIO={};            // cue -> objectURL for uploaded files (this device only)
 let curMusic=null;       // currently-playing looping/music element
 let activeAudio=new Set();// every Audio element currently playing (so we can stop them all)
@@ -1605,7 +1607,7 @@ function setFMStage(p){
   const fm=state.fm; fm.stage=p;
   const dur=p===0?config.t1:config.t2;
   fm.timer={rem:0,dur,run:false,started:false};   // clock starts at 0:00 — host says "give me X on the timer", then ⏱ Set
-  if(p===1) fm.hideP1col=true;   // default to covering Player 1's answers when Player 2 comes up
+  if(p===1){ fm.hideP1col=true; sfx('fmp2'); }   // cover Player 1's answers + play Player 2's entrance music
   if(p===0) fm.hideP1col=false;
   stopFMTick(); pushState();
 }
@@ -2238,7 +2240,7 @@ const ACT={
     let slot=fm.cells.findIndex(c=>!(c.ans[p]||'').trim()); if(slot<0)slot=0;
     startCapture(slot,p); },
   'fm-chip'(a){ const fm=state.fm; fm.cells[+a[0]].pts[fm.stage]=+a[1]; pushState(); },
-  'fm-ans-show'(a){ const c=state.fm.cells[+a[0]]; c.ansShown[+a[1]]=!c.ansShown[+a[1]]; lastFMCell={slot:+a[0],p:+a[1]}; pushState(); },
+  'fm-ans-show'(a){ const c=state.fm.cells[+a[0]]; c.ansShown[+a[1]]=!c.ansShown[+a[1]]; lastFMCell={slot:+a[0],p:+a[1]}; if(c.ansShown[+a[1]]) sfx('yousaid'); pushState(); },
   'fm-pts-reveal'(a){ const c=state.fm.cells[+a[0]]; const p=+a[1];
     c.ptsShown[p]=!c.ptsShown[p];
     if(c.ptsShown[p]) sfx((Number(c.pts[p])||0)>0 ? 'ding' : 'fmzero');
