@@ -148,7 +148,7 @@ body.board{overflow:hidden;user-select:none;cursor:default}
 /* ============ ADMIN ============ */
 body.admin{background:var(--adm-bg);color:var(--adm-text);font-family:Arial,Helvetica,sans-serif;overflow-y:scroll}
 #admin{max-width:1180px;margin:0 auto;padding:14px 18px 80px}
-.adm-sticky{position:sticky;top:0;z-index:20;background:var(--adm-bg);box-shadow:0 6px 14px -8px rgba(0,0,0,.7)}
+.adm-sticky{position:static;background:var(--adm-bg)}
 .adm-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--adm-line);background:var(--adm-bg)}
 #viewBar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 0 10px;border-bottom:1px solid var(--adm-line)}
 #viewBar .vbLabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--adm-mut);font-weight:700;margin-right:4px}
@@ -441,6 +441,7 @@ Tonight it's {teamA} taking on {teamB}. Let's meet our players!
  faceoff_pre:
 `It's time for the Face-Off! {podiumA} and {podiumB} — hands on your buzzers.
 We surveyed 100 people and the top {nAnswers} answers are on the board.
+{multNote}
 ?Here's the question: {question}
 >Arm the buzzers, then read the question. First to buzz answers first.`,
  faceoff_post:
@@ -453,9 +454,15 @@ We surveyed 100 people and the top {nAnswers} answers are on the board.
 >Tap PLAY or PASS in the pop-up — control is set automatically.`,
  round_play:
 `{control} is in control of the board.
+{multNote}
 ?{turnPlayer}, {question}
 We're looking for {nAnswers} answers — {revealed} revealed so far. Board pot: {pot}.
 >Reveal each correct answer. A wrong/unlisted answer is a strike, and play moves to the next player on the team — {turnPlayer} is up now. Three strikes hands the steal to the other team. Strikes: {strikes}.`,
+ round_twostrikes:
+`That's TWO strikes on {control} — one more and the board is up for grabs!
+{multNote}
+?{turnPlayer}, careful — you've got one strike left. What's your answer?
+>{otherTeam} — get ready to STEAL: if {control} gets a third strike, your team gets ONE guess to win {pot} points.`,
  round_steal:
 `Three strikes! {control} can STEAL it — {turnPlayer} answers.
 ?{turnPlayer}, one answer to win {pot} points. What is it?
@@ -465,25 +472,23 @@ We're looking for {nAnswers} answers — {revealed} revealed so far. Board pot: 
 >Reveal any remaining un-guessed answers one at a time, then move to the next round.`,
  fm_intro:
 `It's time for Fast Money! {p1} and {p2} are our two players.
-{curPlayer}, you're up — {curTime} seconds on the clock. I'll ask five questions; answer with the first thing that comes to mind.
-If you can't think of an answer, just say "Pass".
-We need {target} points total to win. Current total: {total}.
->Read the 5 questions quickly. After the run, reveal each "Survey says…". Duplicate answers buzz automatically.`,
+{p1}, you're up first. I'll ask five questions — answer with the first thing that comes to mind. If you can't think of one, just say "Pass".
+We need {target} points total to win.
+Give me {curTime} on the timer!
+>Tap ⏱ Set to put {curTime} on the clock, then ▶ Start (that arms the mic). Read the 5 questions quickly.`,
+ fm_p1_done:
+`We've hidden the answers {p1} gave us — let's bring out {p2}!
+>When ready, switch to {p2} (Player 2) on the control panel — the full Player 2 read-in will appear here.`,
  fm_p2:
-`{p2}, you're up — {curTime} seconds. Same five questions; answer fast.
-If you can't think of an answer, just say "Pass".
-If you duplicate {p1}'s answer, you'll hear this — [play the duplicate sound] — and I'll ask you to give another answer.
-We need {target} total to win — current total: {total}.
->Capture answers; a duplicate auto-buzzes. Use the Sound board "duplicate" button if you want to cue it manually.`,
+`{p2}, come on up! {p1} put {p1total} points on the board — that means you need {need} points to win.
+Same five questions — answer fast, and try not to repeat what {p1} said. If you can't think of one, say "Pass".
+If you match one of {p1}'s answers you'll hear this — [play the duplicate sound] — and I'll ask you for another.
+Give me {curTime} on the timer!
+>Tap ⏱ Set to put {curTime} on the clock, then ▶ Start (that arms the mic). A duplicate auto-buzzes, or tap the Duplicate-sound button to cue it.`,
  fm_reveal:
 `Let's see how you did, {curPlayer}!
 "Survey says…!"
 >Reveal each answer one at a time: tap "You said…" to show the answer, then "Survey says…" to flip the points — the total climbs as you go.`,
- fm_p1_done:
-`Great job, {p1} — that puts {p1total} on the board!
-Now let's bring out {p2}. {p2}, {p1} scored {p1total} — you need {need} to win.
-?{p2}, ready? Same five questions — answer fast.
->Switch to {p2} (Player 2) in the control panel, then start the clock.`,
  fm_win:
 `{p1} and {p2} scored {total} — that's {target} or more… YOU WIN!
 >Cue the confetti — then reveal any answers still hidden so everyone sees them and the #1 survey answers (👁 Reveal All Answers).`,
@@ -500,7 +505,7 @@ function getScripts(){ return Object.assign({}, DEFAULT_SCRIPTS, config.scripts|
 
 function newFM(){
   return {selQs:[0,1,2,3,4].map(i=>Math.min(i,bank.fast.length-1)),stage:0,result:null,autoResult:true,pNames:['Player 1','Player 2'],
-    timer:{rem:config.t1,run:false},
+    timer:{rem:0,dur:config.t1,run:false,started:false},
     cells:Array.from({length:5},()=>({ans:['',''],pts:[0,0],ansShown:[false,false],ptsShown:[false,false]}))};
 }
 function newState(){
@@ -860,7 +865,7 @@ function boardRender(s){
     const t=fm.timer;
     mid=`<div class="fmWrap">
       <div class="fmTitle">FAST MONEY</div>
-      <div class="fmTimer ${t.run&&t.rem<=5?'low':''}">${t.started?(t.rem>0?t.rem:'TIME!'):''}</div>
+      <div class="fmTimer ${t.run&&t.rem<=5?'low':''}">${(t.started&&t.rem<=0)?'TIME!':(Math.floor((t.rem||0)/60)+':'+String((t.rem||0)%60).padStart(2,'0'))}</div>
       <div class="fmGrid"><div class="fmHead"><div>${esc((fm.pNames&&fm.pNames[0])||'Player 1')}</div><div>${esc((fm.pNames&&fm.pNames[1])||'Player 2')}</div></div>${rows.join('')}
         <div class="fmTotal ${total>=config.target?'hit':''}"><span>TOTAL</span><span>${total} / ${config.target}${total>=config.target?' 🎉':''}</span></div>
       </div>
@@ -953,7 +958,7 @@ function fmCaptured(s,p){ const fm=s.fm; if(!fm)return false; const t=fm.timer; 
 function fmRevealed(s,p){ const fm=s.fm; return !!fm && fm.cells.every(c=>c.ptsShown[p]); }   // every cell's points shown for player p
 /* Build the step-by-step emcee script for the current state, from the
    (editable) templates in getScripts(). */
-const SEG_PHASE={idle:'Welcome',faceoff_pre:'Face-Off',faceoff_post:'Face-Off',faceoff_decide:'Face-Off',round_play:'Round',round_steal:'Round',round_awarded:'Round',fm_intro:'Fast Money',fm_p2:'Fast Money',fm_reveal:'Fast Money',fm_p1_done:'Fast Money',fm_win:'Fast Money',fm_lose:'Fast Money',winner:'Champions'};
+const SEG_PHASE={idle:'Welcome',faceoff_pre:'Face-Off',faceoff_post:'Face-Off',faceoff_decide:'Face-Off',round_play:'Round',round_twostrikes:'Round',round_steal:'Round',round_awarded:'Round',fm_intro:'Fast Money',fm_p2:'Fast Money',fm_reveal:'Fast Money',fm_p1_done:'Fast Money',fm_win:'Fast Money',fm_lose:'Fast Money',winner:'Champions'};
 function segmentKey(s){
   if(s.faceoffWinner!=null && s.playPass==null) return 'faceoff_decide';  // any view
   if(s.foPhase) return 'faceoff_post';                                    // revealing face-off answers
@@ -962,7 +967,9 @@ function segmentKey(s){
     case 'faceoff': return (s.buzz&&s.buzz.winner!=null)?'faceoff_post':'faceoff_pre';
     case 'round':
       if(s.stealMode) return 'round_steal';
-      return s.awarded?'round_awarded':'round_play';
+      if(s.awarded) return 'round_awarded';
+      if(s.strikes===2 && s.active!=null && !s.foPhase) return 'round_twostrikes';
+      return 'round_play';
     case 'fastmoney':
       if(s.fm&&s.fm.result==='win') return 'fm_win';
       if(s.fm&&s.fm.result==='lose') return 'fm_lose';
@@ -997,6 +1004,9 @@ function scriptVars(s){
     foAsk: (s.foPhase && foAsker(s)) ? podiumName(s, foAsker(s).team) : '',
     p1total: fmTotForP(s,0), need: Math.max(0, (config.target||0) - fmTotForP(s,0)),
     loser: (s.winner!=null) ? s.teams[s.winner===0?1:0].name : 'our other team',
+    otherTeam: (s.active!=null && s.teams[s.active===0?1:0]) ? s.teams[s.active===0?1:0].name : 'the other team',
+    multNote: (()=>{ const m=(s.view==='round'||s.view==='faceoff')&&s.rounds[s.roundIdx]?s.rounds[s.roundIdx].mult:1;
+      return m>=3?'💥💥 TRIPLE round — every answer is worth TRIPLE points!':(m===2?'💥 DOUBLE round — every answer is worth DOUBLE points!':''); })(),
     winner:s.winner!=null?s.teams[s.winner].name:'the winners'
   };
 }
@@ -1144,8 +1154,8 @@ function renderAdmin(){
   if(fSel){ const el=document.querySelector(fSel); if(el){ try{el.focus();}catch(e){} if(fS!=null){ try{el.setSelectionRange(fS,fE);}catch(e){} } } }
 }
 function setFMStickyTop(){
-  const ctl=$('#fmCtl'), head=$('.adm-sticky');
-  if(ctl&&head) ctl.style.top=head.offsetHeight+'px';
+  const ctl=$('#fmCtl');
+  if(ctl) ctl.style.top='0px';   // header no longer sticky, so FM control sticks to the top
 }
 function renderViewBar(){
   const s=state, vb=$('#viewBar'); if(!vb)return;
@@ -1453,13 +1463,16 @@ function renderFMTab(){
       <span class="mut">TOTAL</span><span class="bigStat" style="color:${fmTotal()>=config.target?'#7ee08a':'var(--gold2)'}">${fmTotal()} / ${config.target}</span>
     </div>
     <div class="row" style="margin-bottom:8px">
-      <span class="bigStat">${t.started?(t.rem>0?t.rem+'s':'TIME!'):'—'}</span>
-      <button class="btn green" data-act="fm-timer|start" ${t.run?'disabled':''}>▶ Start</button>
+      <span class="bigStat">${(t.started&&t.rem<=0)?'TIME!':((t.rem||0)+'s')}</span>
+      <button class="btn" data-act="fm-timer|set" title="Put ${fm.stage===0?config.t1:config.t2}s on the clock (host: “give me ${fm.stage===0?config.t1:config.t2} on the timer”)">⏱ Set ${fm.stage===0?config.t1:config.t2}s</button>
+      <button class="btn green" data-act="fm-timer|start" ${(t.run||!(t.rem>0))?'disabled':''}>▶ Start (arms mic)</button>
       <button class="btn" data-act="fm-timer|pause" ${!t.run?'disabled':''}>⏸ Pause</button>
       <button class="btn" data-act="fm-timer|reset">↺ Reset</button>
       <span class="spacer" style="flex:1"></span>
       ${micReady?'':'<button class="btn gold" data-act="mic-enable">🎤 Enable mic (once)</button>'}
       <button class="btn ${rec?'red toggled':'gold'} big" data-act="fm-dictate">${rec?('🔴 Listening — say Answer '+(Math.min(micSeq,4)+1)+' (click to stop)'):'🎤 Capture answers ('+esc(fmPName(fm.stage))+')'}</button>
+      <button class="btn sm" data-act="sound|duplicate" title="Play the duplicate buzzer sound on cue">🔁 Duplicate sound</button>
+      <button class="btn sm red" data-act="fm-clear-answers" title="Clear ${esc(fmPName(fm.stage))}'s captured answers to redo them">🧹 Clear answers</button>
     </div>
     <div class="mut" style="margin-bottom:8px">Flow — <b>during the run:</b> start the timer for ${esc(fmPName(fm.stage))}. <b>To capture answers:</b> hit 🎤 Dictate, then say <i>"Number 1 {answer}, Number 2 {answer} …"</i> through 5, then click to stop — the answers fill in automatically and exact survey matches auto-fill their points. (The single 🎤 by any answer re-captures just that one.) <b>After:</b> review and make any manual changes. <b>Reveal ceremony:</b> 🗣 <i>"You said…"</i> flips the answer, then 📊 <i>"Survey says…"</i> flips the points. <b>Duplicates</b> auto-buzz; use <b>DUP</b> for close calls.</div>
   </div>
@@ -1483,7 +1496,7 @@ function renderFMTab(){
 function setFMStage(p){
   const fm=state.fm; fm.stage=p;
   const dur=p===0?config.t1:config.t2;
-  fm.timer={rem:dur,dur,run:false,started:false};
+  fm.timer={rem:0,dur,run:false,started:false};   // clock starts at 0:00 — host says "give me X on the timer", then ⏱ Set
   if(p===1) fm.hideP1col=true;   // default to covering Player 1's answers when Player 2 comes up
   if(p===0) fm.hideP1col=false;
   stopFMTick(); pushState();
@@ -1491,10 +1504,12 @@ function setFMStage(p){
 function stopFMTick(){ if(fmTickInt){clearInterval(fmTickInt);fmTickInt=null;} }
 function fmTimerCtl(cmd){
   const t=state.fm.timer;
-  if(cmd==='start'&&!t.run&&t.rem>0){ t.run=true;t.started=true;
+  if(cmd==='set'){ stopFMTick(); t.dur=(state.fm.stage===0?config.t1:config.t2); t.rem=t.dur; t.run=false; t.started=false; }
+  else if(cmd==='start'&&!t.run&&t.rem>0){ t.run=true;t.started=true;
     fmTickInt=setInterval(()=>{ t.rem--; if(t.rem<=0){t.rem=0;t.run=false;stopFMTick();sfx('timesup');} pushState(); },1000);
+    try{ startDictation(); }catch(e){}   // starting the clock arms the mic for capturing answers
   }else if(cmd==='pause'){ t.run=false; stopFMTick(); }
-  else if(cmd==='reset'){ stopFMTick(); state.fm.timer={rem:t.dur||config.t1,dur:t.dur||config.t1,run:false,started:false}; }
+  else if(cmd==='reset'){ stopFMTick(); state.fm.timer={rem:0,dur:t.dur||config.t1,run:false,started:false}; }   // back to 0:00
   pushState();
 }
 /* Continuous mic session: started ONCE (one permission prompt) and kept
@@ -1664,7 +1679,7 @@ async function hidConnect(sonyOnly){
 if(MODE==='admin'&&navigator.hid){ try{navigator.hid.getDevices().then(ds=>{ds.forEach(openHidDevice);renderSetup();});}catch(e){} }
 
 /* ---------- HOST SCRIPTS TAB ---------- */
-const SCRIPT_SEGS=[['idle','Welcome / Idle'],['faceoff_pre','Face-Off — before buzz'],['faceoff_post','Face-Off — after buzz-in'],['faceoff_decide','Face-Off — Play / Pass decision'],['round_play','Round — in play'],['round_steal','Round — steal (after 3 strikes)'],['round_awarded','Round — winners announced'],['fm_intro','Fast Money — Player 1 intro / in progress'],['fm_reveal','Fast Money — reveal ceremony (let’s see how you did)'],['fm_p1_done','Fast Money — Player 1 done, bring out Player 2'],['fm_p2','Fast Money — Player 2 intro (duplicate warning)'],['fm_win','Fast Money — reached target (win)'],['fm_lose','Fast Money — fell short'],['winner','Champions / end of game']];
+const SCRIPT_SEGS=[['idle','Welcome / Idle'],['faceoff_pre','Face-Off — before buzz'],['faceoff_post','Face-Off — after buzz-in'],['faceoff_decide','Face-Off — Play / Pass decision'],['round_play','Round — in play'],['round_twostrikes','Round — two strikes (warn the steal)'],['round_steal','Round — steal (after 3 strikes)'],['round_awarded','Round — winners announced'],['fm_intro','Fast Money — Player 1 intro / in progress'],['fm_reveal','Fast Money — reveal ceremony (let’s see how you did)'],['fm_p1_done','Fast Money — Player 1 done, bring out Player 2'],['fm_p2','Fast Money — Player 2 intro (duplicate warning)'],['fm_win','Fast Money — reached target (win)'],['fm_lose','Fast Money — fell short'],['winner','Champions / end of game']];
 function renderScripts(){
   const sc=getScripts();
   const cards=SCRIPT_SEGS.map(([k,label])=>`
@@ -2115,6 +2130,7 @@ const ACT={
       else if(fmGameComplete()){ state.fm.result='lose'; sfx('lose'); }
     }
     pushState(); },
+  'fm-clear-answers'(){ const p=state.fm.stage; state.fm.cells.forEach(c=>{ c.ans[p]=''; c.pts[p]=0; c.ansShown[p]=false; c.ptsShown[p]=false; }); micSeq=0; pushState(); },
   'fm-dup'(a){ const c=state.fm.cells[+a[0]],p=+a[1]; sfx('duplicate');
     c.ans[p]='';c.pts[p]=0;c.ansShown[p]=false;c.ptsShown[p]=false; pushState(); },
   'fm-celebrate'(){ sfx('fmwin'); },
