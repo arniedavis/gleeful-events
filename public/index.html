@@ -154,7 +154,8 @@ body.admin{background:var(--adm-bg);color:var(--adm-text);font-family:Arial,Helv
 #viewBar .vbLabel{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--adm-mut);font-weight:700;margin-right:4px}
 #viewBar .vbScore{font-size:15px;font-weight:800;margin-left:16px;white-space:nowrap}
 #viewBar .vbScore b{font-weight:800}
-.card.collapsed{padding-bottom:12px}
+.card.collapsed{padding:7px 16px;margin-bottom:8px}
+.card.collapsed > h2{margin:0}
 .card > h2{cursor:pointer;user-select:none}
 .card > h2::before{content:'▾ ';color:var(--gold2);font-weight:900}
 .card.collapsed > h2::before{content:'▸ '}
@@ -464,14 +465,15 @@ We're looking for {nAnswers} answers — {revealed} revealed so far. Board pot: 
 ?{turnPlayer}, careful — you've got one strike left. What's your answer?
 >{otherTeam} — get ready to STEAL: if {control} gets a third strike, your team gets ONE guess to win {pot} points.`,
  round_steal:
-`Three strikes! {control} can STEAL it — {turnPlayer} answers.
-?{turnPlayer}, one answer to win {pot} points. What is it?
->One guess only: a correct answer auto-awards {control}; a wrong one gives the points to {stealFrom}.`,
+`Three strikes! It's a STEAL — {control}, this is your chance!
+?{control} — one answer to steal the round. What is it?
+>The TEAM confers and gives ONE answer. A correct answer steals the round for {control}; a wrong one gives it to {stealFrom}.`,
  round_awarded:
 `{awarded} win the round with {pot} points!
 >Reveal any remaining un-guessed answers one at a time, then move to the next round.`,
  fm_intro:
 `It's time for Fast Money! {p1} and {p2} are our two players.
+We'll put {p2} in isolation while {p1} plays.
 {p1}, you're up first. I'll ask five questions — answer with the first thing that comes to mind. If you can't think of one, just say "Pass".
 We need {target} points total to win.
 Give me {curTime} on the timer!
@@ -489,6 +491,11 @@ Give me {curTime} on the timer!
 `Let's see how you did, {curPlayer}!
 "Survey says…!"
 >Reveal each answer one at a time: tap "You said…" to show the answer, then "Survey says…" to flip the points — the total climbs as you go.`,
+ fm_reveal2:
+`Now let's remind everyone of {p1}'s answers — {p1} put up {p1total} points.
+{p2}, let's see how YOU did!
+"Survey says…!"
+>First recap {p1}'s answers, then reveal {p2}'s one at a time: "You said…" then "Survey says…". The total climbs as you go.`,
  fm_win:
 `{p1} and {p2} scored {total} — that's {target} or more… YOU WIN!
 >Cue the confetti — then reveal any answers still hidden so everyone sees them and the #1 survey answers (👁 Reveal All Answers).`,
@@ -958,7 +965,7 @@ function fmCaptured(s,p){ const fm=s.fm; if(!fm)return false; const t=fm.timer; 
 function fmRevealed(s,p){ const fm=s.fm; return !!fm && fm.cells.every(c=>c.ptsShown[p]); }   // every cell's points shown for player p
 /* Build the step-by-step emcee script for the current state, from the
    (editable) templates in getScripts(). */
-const SEG_PHASE={idle:'Welcome',faceoff_pre:'Face-Off',faceoff_post:'Face-Off',faceoff_decide:'Face-Off',round_play:'Round',round_twostrikes:'Round',round_steal:'Round',round_awarded:'Round',fm_intro:'Fast Money',fm_p2:'Fast Money',fm_reveal:'Fast Money',fm_p1_done:'Fast Money',fm_win:'Fast Money',fm_lose:'Fast Money',winner:'Champions'};
+const SEG_PHASE={idle:'Welcome',faceoff_pre:'Face-Off',faceoff_post:'Face-Off',faceoff_decide:'Face-Off',round_play:'Round',round_twostrikes:'Round',round_steal:'Round',round_awarded:'Round',fm_intro:'Fast Money',fm_p2:'Fast Money',fm_reveal:'Fast Money',fm_reveal2:'Fast Money',fm_p1_done:'Fast Money',fm_win:'Fast Money',fm_lose:'Fast Money',winner:'Champions'};
 function segmentKey(s){
   if(s.faceoffWinner!=null && s.playPass==null) return 'faceoff_decide';  // any view
   if(s.foPhase) return 'faceoff_post';                                    // revealing face-off answers
@@ -973,7 +980,7 @@ function segmentKey(s){
     case 'fastmoney':
       if(s.fm&&s.fm.result==='win') return 'fm_win';
       if(s.fm&&s.fm.result==='lose') return 'fm_lose';
-      if(s.fm&&s.fm.stage===1) return fmCaptured(s,1)?'fm_reveal':'fm_p2';
+      if(s.fm&&s.fm.stage===1) return fmCaptured(s,1)?'fm_reveal2':'fm_p2';
       // player 1: asking → reveal ceremony → done (bring out player 2)
       if(!fmCaptured(s,0)) return 'fm_intro';
       if(!fmRevealed(s,0)) return 'fm_reveal';
@@ -1062,6 +1069,15 @@ function hostRender(s){
       const shown = fm.cells[slot] && (fm.cells[slot].ptsShown[0]||fm.cells[slot].ptsShown[1]);
       return `<div class="fq"><b>Q${slot+1}.</b> ${esc(fq.q||'…')}${shown?' <span class="mut">(revealed)</span>':''}</div>`;}).join('');
     fmBlock=`<div class="h-card h-fmlist"><h3>Fast Money — ${esc(fmPNameFor(s,0))} &amp; ${esc(fmPNameFor(s,1))}</h3>${list}</div>`;
+    // After the result, give the host the #1 survey answer for each question to read out
+    // (host reference only — the scoreboard is NOT changed by this).
+    if(fm.result){
+      const recap=fm.selQs.map((qi,slot)=>{const fq=(bank.fast&&bank.fast[qi])||{q:'',answers:[]};
+        const top=(fq.answers&&fq.answers[0])?fq.answers[0]:null;
+        const unrev = !(fm.cells[slot] && (fm.cells[slot].ptsShown[0]&&fm.cells[slot].ptsShown[1]));
+        return `<div class="fq"><b>Q${slot+1}.</b> ${esc(fq.q||'…')} — #1: <b>${top?esc(top[0])+' ('+top[1]+')':'—'}</b>${unrev?' <span class="mut">· not fully revealed</span>':''}</div>`;}).join('');
+      fmBlock+=`<div class="h-card h-fmlist"><h3>Read the top answers (host only)</h3>${recap}</div>`;
+    }
   }
   // rosters / players panel — content depends on the phase
   let ros, rosTitle='Players';
@@ -1074,15 +1090,16 @@ function hostRender(s){
     }).join('');
   } else {
     const fa=foAsker(s);
-    const inRound=(s.view==='round' && s.active!=null && !s.foPhase);
+    const inRound=(s.view==='round' && s.active!=null && !s.foPhase && !s.stealMode);   // steal = whole team, not one player
     ros=[0,1].map(i=>{const t=s.teams[i]; const pod=(s.podium&&s.podium[i]); const turnIdx=(s.turn!=null?s.turn:pod);
       const ps=(t.players||[]).map((nm,pi)=>{ let tag='',cls='';
         if(s.foPhase){ if(fa && fa.team===i && fa.idx===pi){ tag='<span class="tag">ANSWERING</span>'; cls='podium'; } }
         else if(inRound){ if(i===s.active && pi===turnIdx){ tag='<span class="tag">ANSWERING</span>'; cls='podium'; } }
-        else if(pod===pi){ tag='<span class="tag">AT PODIUM</span>'; cls='podium'; }   // idle / face-off pre-buzz
+        else if((s.view==='idle'||s.view==='faceoff') && pod===pi){ tag='<span class="tag">AT PODIUM</span>'; cls='podium'; }
         return `<div class="p ${cls}">${esc(nm.trim()||('Player '+(pi+1)))}${tag}</div>`;
       }).join('');
-      return `<div class="col"><div class="tt" style="color:${esc(t.color)}">${esc(t.name)}${ctrlIdx===i?' · ▶ control':''}</div>${ps||'<span class="mut">no players entered</span>'}</div>`;}).join('');
+      const hdrNote = (s.stealMode && s.active===i) ? ' · 🥷 STEALING' : (ctrlIdx===i?' · ▶ control':'');
+      return `<div class="col"><div class="tt" style="color:${esc(t.color)}">${esc(t.name)}${hdrNote}</div>${ps||'<span class="mut">no players entered</span>'}</div>`;}).join('');
   }
   const scriptHtml=sc.lines.map(l=> l.read!=null?`<p class="read">${esc(l.read)}</p>` : l.q!=null?`<p class="q">“${esc(l.q)}”</p>` : `<p class="cue">▶ ${esc(l.cue)}</p>`).join('');
   el.innerHTML=`
@@ -1438,16 +1455,16 @@ function renderFMTab(){
   }).join('');
   const t=fm.timer;
   $('#tab-fm').innerHTML=`
-  <div class="card fmSticky" id="fmCtl"><h2>Fast Money control ${state.view!=='fastmoney'?'<span class="warn">— scoreboard is not on Fast Money view (Game tab → 💰)</span>':''}</h2>
+  <div class="card" id="fmPlayers"><h2>Fast Money players</h2>
     <div class="row" style="margin-bottom:8px">
       <span class="mut">Load designated FM players</span>
       <button class="btn sm" data-act="fm-loadteam|0">${esc(state.teams[0].name)}</button>
       <button class="btn sm" data-act="fm-loadteam|1">${esc(state.teams[1].name)}</button>
       <span class="mut">· or pick</span>
-      <select data-chg="fm-pick|0" style="max-width:200px"><option value="">— FM Player 1 —</option>${fmRosterOpts()}</select>
-      <select data-chg="fm-pick|1" style="max-width:200px"><option value="">— FM Player 2 —</option>${fmRosterOpts()}</select>
+      <select data-chg="fm-pick|0" style="max-width:180px"><option value="">— FM Player 1 —</option>${fmRosterOpts()}</select>
+      <select data-chg="fm-pick|1" style="max-width:180px"><option value="">— FM Player 2 —</option>${fmRosterOpts()}</select>
     </div>
-    <div class="row" style="margin-bottom:8px">
+    <div class="row">
       <span class="mut">or type</span>
       <input type="text" value="${esc((fm.pNames&&fm.pNames[0])||'Player 1')}" data-chg="fm-pname|0" placeholder="Player 1" style="width:150px">
       <input type="text" value="${esc((fm.pNames&&fm.pNames[1])||'Player 2')}" data-chg="fm-pname|1" placeholder="Player 2" style="width:150px">
@@ -1455,26 +1472,26 @@ function renderFMTab(){
       <label class="mut">${esc(fmPName(0))} <input type="number" value="${config.t1}" data-chg="cfg|t1">s</label>
       <label class="mut">${esc(fmPName(1))} <input type="number" value="${config.t2}" data-chg="cfg|t2">s</label>
     </div>
+  </div>
+  <div class="card fmSticky" id="fmCtl"><h2>Fast Money control ${state.view!=='fastmoney'?'<span class="warn">— scoreboard is not on Fast Money view (Game tab → 💰)</span>':''}</h2>
     <div class="row" style="margin-bottom:8px">
-      <button class="btn ${fm.stage===0?'gold':''}" data-act="fm-stage|0">${esc(fmPName(0))} (${config.t1}s)</button>
-      <button class="btn ${fm.stage===1?'gold':''}" data-act="fm-stage|1">${esc(fmPName(1))} (${config.t2}s)</button>
-      <label class="mut"><input type="checkbox" ${fm.hideP1col?'checked':''} data-chg="fm-cover"> cover ${esc(fmPName(0))} column</label>
+      <button class="btn sm ${fm.stage===0?'gold':''}" data-act="fm-stage|0">${esc(fmPName(0))} (${config.t1}s)</button>
+      <button class="btn sm ${fm.stage===1?'gold':''}" data-act="fm-stage|1">${esc(fmPName(1))} (${config.t2}s)</button>
+      <label class="mut"><input type="checkbox" ${fm.hideP1col?'checked':''} data-chg="fm-cover"> cover ${esc(fmPName(0))}</label>
       <span class="spacer" style="flex:1"></span>
       <span class="mut">TOTAL</span><span class="bigStat" style="color:${fmTotal()>=config.target?'#7ee08a':'var(--gold2)'}">${fmTotal()} / ${config.target}</span>
     </div>
-    <div class="row" style="margin-bottom:8px">
-      <span class="bigStat">${(t.started&&t.rem<=0)?'TIME!':((t.rem||0)+'s')}</span>
-      <button class="btn" data-act="fm-timer|set" title="Put ${fm.stage===0?config.t1:config.t2}s on the clock (host: “give me ${fm.stage===0?config.t1:config.t2} on the timer”)">⏱ Set ${fm.stage===0?config.t1:config.t2}s</button>
-      <button class="btn green" data-act="fm-timer|start" ${(t.run||!(t.rem>0))?'disabled':''}>▶ Start (arms mic)</button>
-      <button class="btn" data-act="fm-timer|pause" ${!t.run?'disabled':''}>⏸ Pause</button>
-      <button class="btn" data-act="fm-timer|reset">↺ Reset</button>
-      <span class="spacer" style="flex:1"></span>
-      ${micReady?'':'<button class="btn gold" data-act="mic-enable">🎤 Enable mic (once)</button>'}
-      <button class="btn ${rec?'red toggled':'gold'} big" data-act="fm-dictate">${rec?('🔴 Listening — say Answer '+(Math.min(micSeq,4)+1)+' (click to stop)'):'🎤 Capture answers ('+esc(fmPName(fm.stage))+')'}</button>
-      <button class="btn sm" data-act="sound|duplicate" title="Play the duplicate buzzer sound on cue">🔁 Duplicate sound</button>
-      <button class="btn sm red" data-act="fm-clear-answers" title="Clear ${esc(fmPName(fm.stage))}'s captured answers to redo them">🧹 Clear answers</button>
+    <div class="row" style="flex-wrap:nowrap;overflow-x:auto;gap:6px">
+      <span class="bigStat" style="min-width:58px">${(t.started&&t.rem<=0)?'TIME!':((t.rem||0)+'s')}</span>
+      <button class="btn sm" data-act="fm-timer|set" title="Host: “give me ${fm.stage===0?config.t1:config.t2} on the timer.” Click again to clear back to 0.">${(t.rem>0&&!t.run)?'↺ Clear clock':('⏱ Set '+(fm.stage===0?config.t1:config.t2)+'s')}</button>
+      <button class="btn green sm" data-act="fm-timer|start" ${(t.run||!(t.rem>0))?'disabled':''}>▶ Start</button>
+      <button class="btn sm" data-act="fm-timer|pause" ${!t.run?'disabled':''}>⏸</button>
+      <button class="btn sm" data-act="fm-timer|reset">↺ Reset</button>
+      ${micReady?'':'<button class="btn gold sm" data-act="mic-enable">🎤 Enable mic</button>'}
+      <button class="btn sm ${rec?'red toggled':'gold'}" data-act="fm-dictate" title="Start also arms the mic; this re-captures manually">${rec?('🔴 Ans '+(Math.min(micSeq,4)+1)):'🎤 Capture'}</button>
+      <button class="btn sm" data-act="sound|duplicate" title="Play the duplicate buzzer sound on cue">🔁 Dup</button>
+      <button class="btn sm red" data-act="fm-clear-answers" title="Clear ${esc(fmPName(fm.stage))}'s captured answers to redo them">🧹 Clear</button>
     </div>
-    <div class="mut" style="margin-bottom:8px">Flow — <b>during the run:</b> start the timer for ${esc(fmPName(fm.stage))}. <b>To capture answers:</b> hit 🎤 Dictate, then say <i>"Number 1 {answer}, Number 2 {answer} …"</i> through 5, then click to stop — the answers fill in automatically and exact survey matches auto-fill their points. (The single 🎤 by any answer re-captures just that one.) <b>After:</b> review and make any manual changes. <b>Reveal ceremony:</b> 🗣 <i>"You said…"</i> flips the answer, then 📊 <i>"Survey says…"</i> flips the points. <b>Duplicates</b> auto-buzz; use <b>DUP</b> for close calls.</div>
   </div>
   <div class="card"><h2>Fast Money answers</h2>
     ${rows}
@@ -1679,7 +1696,7 @@ async function hidConnect(sonyOnly){
 if(MODE==='admin'&&navigator.hid){ try{navigator.hid.getDevices().then(ds=>{ds.forEach(openHidDevice);renderSetup();});}catch(e){} }
 
 /* ---------- HOST SCRIPTS TAB ---------- */
-const SCRIPT_SEGS=[['idle','Welcome / Idle'],['faceoff_pre','Face-Off — before buzz'],['faceoff_post','Face-Off — after buzz-in'],['faceoff_decide','Face-Off — Play / Pass decision'],['round_play','Round — in play'],['round_twostrikes','Round — two strikes (warn the steal)'],['round_steal','Round — steal (after 3 strikes)'],['round_awarded','Round — winners announced'],['fm_intro','Fast Money — Player 1 intro / in progress'],['fm_reveal','Fast Money — reveal ceremony (let’s see how you did)'],['fm_p1_done','Fast Money — Player 1 done, bring out Player 2'],['fm_p2','Fast Money — Player 2 intro (duplicate warning)'],['fm_win','Fast Money — reached target (win)'],['fm_lose','Fast Money — fell short'],['winner','Champions / end of game']];
+const SCRIPT_SEGS=[['idle','Welcome / Idle'],['faceoff_pre','Face-Off — before buzz'],['faceoff_post','Face-Off — after buzz-in'],['faceoff_decide','Face-Off — Play / Pass decision'],['round_play','Round — in play'],['round_twostrikes','Round — two strikes (warn the steal)'],['round_steal','Round — steal (after 3 strikes)'],['round_awarded','Round — winners announced'],['fm_intro','Fast Money — Player 1 intro / in progress'],['fm_reveal','Fast Money — Player 1 reveal ceremony'],['fm_reveal2','Fast Money — Player 2 reveal (recap P1 first)'],['fm_p1_done','Fast Money — Player 1 done, bring out Player 2'],['fm_p2','Fast Money — Player 2 intro (duplicate warning)'],['fm_win','Fast Money — reached target (win)'],['fm_lose','Fast Money — fell short'],['winner','Champions / end of game']];
 function renderScripts(){
   const sc=getScripts();
   const cards=SCRIPT_SEGS.map(([k,label])=>`
@@ -1986,7 +2003,12 @@ const ACT={
     state.winner=i; loadFMfromTeam(i); state.view='winner'; sfx('gamewin'); pushState(); },
   crownround(a){ const i=+a[0]; if(state.awarded)return;   // manually declare this team the round winner
     state.teams[i].score+=state.pot; state.awarded=true; state.awardedTo=i; sfx('award'); pushState(); },
-  'nextround'(){ closeRoundEnd(); sfx('roundchange');
+  'nextround'(){
+    // don't advance until every answer on this round's board has been revealed
+    { const r=state.rounds[state.roundIdx], q=bank.main[r.q]||{answers:[]};
+      const hid=(q.answers||[]).filter((_,i)=>!state.revealed[i]).length;
+      if(hid>0){ openRoundEnd(); return; } }
+    closeRoundEnd(); sfx('roundchange');
     const ni=Math.min(state.rounds.length-1,state.roundIdx+1);
     ACT.round([ni]);                       // advance round, auto-advance podium, reset board
     state.view='faceoff'; state.buzz={armed:true,winner:null};
@@ -2006,7 +2028,12 @@ const ACT={
     document.body.appendChild(card);
   },
   'endgame-cancel'(){ const c=document.getElementById('endGameConfirm'); if(c)c.remove(); },
-  declarewinner(a){ const c=document.getElementById('endGameConfirm'); if(c)c.remove(); closeRoundEnd(); const final = a && a[0]==='final'; const x=state.teams[0].score, y=state.teams[1].score;
+  declarewinner(a){ const final = a && a[0]==='final';
+    // On the final round, don't crown until every answer on the board has been revealed.
+    if(final && state.view==='round'){ const r=state.rounds[state.roundIdx], q=bank.main[r.q]||{answers:[]};
+      const hid=(q.answers||[]).filter((_,i)=>!state.revealed[i]).length;
+      if(hid>0){ openRoundEnd(); return; } }   // keep the pop-up open; reveal remaining first
+    const c=document.getElementById('endGameConfirm'); if(c)c.remove(); closeRoundEnd(); const x=state.teams[0].score, y=state.teams[1].score;
     if(x===y){ alert(`It's a tie — ${x} points each. Play a tiebreaker, then use 👑 Crown Round Winner / Crown to choose.`); return; }
     const i=x>y?0:1;
     // No confirm() on the natural end-of-game declare (from the round-end pop-up): a modal
@@ -2239,8 +2266,8 @@ function openRoundEnd(){
   $('#reBtns').innerHTML =
     '<button class="btn '+(hidden?'gold':'')+'" data-act="revealnext" '+(hidden?'':'disabled')+'>▶ Reveal Next Answer'+(hidden?' ('+hidden+' left)':'')+'</button>'
     + (last
-        ? '<button class="btn gold big" data-act="declarewinner|final">🏆 Declare game winner</button>'
-        : '<button class="btn gold big" data-act="nextround">▶ Start Round '+(state.roundIdx+2)+'</button>')
+        ? '<button class="btn gold big" data-act="declarewinner|final" '+(hidden?'disabled':'')+' title="'+(hidden?'Reveal all remaining answers first':'Crown the champions')+'">🏆 Declare game winner'+(hidden?' (reveal '+hidden+' first)':'')+'</button>'
+        : '<button class="btn gold big" data-act="nextround" '+(hidden?'disabled':'')+' title="'+(hidden?'Reveal all remaining answers first':'Advance to the next round')+'">▶ Start Round '+(state.roundIdx+2)+(hidden?' (reveal '+hidden+' first)':'')+'</button>')
     + '<button class="btn" data-act="round-end-close">Close</button>';
   ov.classList.remove('hidden');
 }
