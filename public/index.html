@@ -314,6 +314,7 @@ body.host{background:#0a1020;color:#eef3ff;font-family:Arial,Helvetica,sans-seri
       <button class="btn" id="openHostBtn">🎙 Open Host Panel</button>
       <button class="btn" id="undoBtn" title="Undo the last action" disabled>↶ Undo</button>
       <button class="btn" id="shortcutsBtn" title="Keyboard shortcuts (press ? )">⌨ Shortcuts</button>
+      <button class="btn" id="stopSoundsBtn" title="Immediately stop any sound or music that's playing">🔇 Stop Sounds</button>
       <button class="btn" id="newGameBtn">🔄 New Game</button>
       <button class="btn red" id="resetAllBtn" title="Erase EVERYTHING — team names, players, FM picks and scores">⚠ Reset All</button>
       <button class="btn" id="undoResetBtn" title="Restore everything the last Reset All erased" style="display:none">↩ Undo Reset All</button>
@@ -689,12 +690,14 @@ function handleMsg(d){
   const {type,payload}=d;
   if(MODE==='board'){
     if(type==='claim'){ if(payload&&payload.id){ activeOwner=payload.id; activeOwnerName=payload.name||''; gotState=false; send('hello'); } return; }   // follow the panel that just took control
-    if((type==='state'||type==='sound'||type==='strike'||type==='buzzwin'||type==='bank'||type==='config') && !fromActiveOwner(d)) return;
+    if((type==='state'||type==='sound'||type==='strike'||type==='buzzwin'||type==='bank'||type==='config'||type==='stopmusic'||type==='stopall') && !fromActiveOwner(d)) return;
     if(type==='snapshot'){ if(payload){ if(payload.bank)bank=payload.bank; if(payload.config)config=Object.assign(config,payload.config); if(payload.state){gotState=true;boardRender(payload.state);} } }
     else if(type==='bank'){ if(payload)bank=payload; }
     else if(type==='config'){ if(payload)config=Object.assign(config,payload); }
     else if(type==='state'){ gotState=true; boardRender(payload); }
-    else if(type==='sound') playSound(payload);
+    else if(type==='sound'){ if(payload&&typeof payload==='object') playSound(payload.n,payload.max); else playSound(payload); }
+    else if(type==='stopmusic') stopMusic();
+    else if(type==='stopall') stopAllSounds();
     else if(type==='strike') strikeOverlay(payload);
     else if(type==='buzzwin') buzzOverlay(payload);
     else if(type==='ping'){ send('pongboard'); if(!gotState) send('hello'); }   // board-specific reply; re-ask for state until it has it (covers no-relay startup)
@@ -788,14 +791,16 @@ const CUES=[
   {k:'swap',label:'Player exchange / podium swap',cat:'music'},
   {k:'roundchange',label:'Round transition',cat:'music'},
   {k:'gamewin',label:'Win the game (champions)',cat:'music'},
+  {k:'fmclock',label:'Fast Money clock (plays while the timer counts down)',cat:'music'},
   {k:'timesup',label:'Fast Money — time’s up',cat:'sfx'},
   {k:'fmzero',label:'Fast Money — no match',cat:'sfx'},
   {k:'fmwin',label:'Fast Money — WIN',cat:'music'},
   {k:'lose',label:'Fast Money — loss',cat:'music'}
 ];
-const MUSIC_CUES=new Set(['theme','swap','roundchange','gamewin','fmwin','lose']);
+const MUSIC_CUES=new Set(['theme','swap','roundchange','gamewin','fmclock','fmwin','lose']);
 let AUDIO={};            // cue -> objectURL for uploaded files (this device only)
 let curMusic=null;       // currently-playing looping/music element
+let activeAudio=new Set();// every Audio element currently playing (so we can stop them all)
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open('ffAudioDB',1);
   r.onupgradeneeded=()=>{ try{r.result.createObjectStore('cues');}catch(e){} };
   r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
@@ -806,33 +811,54 @@ async function loadAudio(){ try{ const db=await idbOpen();
    const keys=await new Promise((res,rej)=>{const tx=db.transaction('cues','readonly');const rq=tx.objectStore('cues').getAllKeys();rq.onsuccess=()=>res(rq.result||[]);rq.onerror=()=>rej(rq.error);});
    for(const k of keys){ const b=await idbDo('readonly',st=>st.get(k)); if(b){ if(AUDIO[k])URL.revokeObjectURL(AUDIO[k]); AUDIO[k]=URL.createObjectURL(b);} } }catch(e){} }
 function stopMusic(){ if(curMusic){ try{curMusic.pause();}catch(e){} curMusic=null; } }
-function playSound(n){
+function stopAllSounds(){   // stop every uploaded clip + looping bed + synth
+  stopMusic();
+  activeAudio.forEach(a=>{ try{a.pause();}catch(e){} }); activeAudio.clear();
+  if(AC){ try{AC.close();}catch(e){} AC=null; }
+}
+function playSound(n,maxOverride){
   if(localStorage.getItem('ffMute')==='1') return;
   const vol=Math.max(0,Math.min(1,(+(localStorage.getItem('ffVol')||'100'))/100));
   if(AUDIO[n]){
     try{ const a=new Audio(AUDIO[n]); a.volume=vol;
-      if(config.audioLoop&&config.audioLoop[n]) a.loop=true;
+      if((config.audioLoop&&config.audioLoop[n]) || n==='fmclock') a.loop=true;   // the clock loops to fill the countdown
       if(MUSIC_CUES.has(n)){ stopMusic(); curMusic=a; }
-      a.play().catch(()=>{}); }catch(e){}
+      activeAudio.add(a); a.addEventListener('ended',()=>activeAudio.delete(a));
+      a.play().catch(()=>{});
+      // auto-stop after the cue's configured length (so you never have to trim the MP3)
+      const len = maxOverride!=null ? maxOverride : ((config.audioLen&&+config.audioLen[n])||0);
+      if(len>0){ setTimeout(()=>{ try{a.pause();}catch(e){} activeAudio.delete(a); if(curMusic===a)curMusic=null; }, len*1000); }
+    }catch(e){}
     return;
   }
   try{ensureAC(); if(SOUND[n])SOUND[n]();}catch(e){}
 }
-function sfx(n){
+function sfx(n,maxOverride){
   const tgt=config.audioTarget||'admin';        // default: play on the admin laptop (mixer)
-  if(tgt==='board'){ if(MODE==='admin') send('sound',n); else playSound(n); }
-  else { if(MODE==='admin') playSound(n); }
+  if(tgt==='board'){ if(MODE==='admin') send('sound',{n,max:maxOverride}); else playSound(n,maxOverride); }
+  else { if(MODE==='admin') playSound(n,maxOverride); }
 }
+function stopCue(){   // stop the current looping bed on whichever device is playing
+  const tgt=config.audioTarget||'admin';
+  if(tgt==='board'){ if(MODE==='admin') send('stopmusic'); else stopMusic(); }
+  else { if(MODE==='admin') stopMusic(); }
+}
+function stopAllSoundsEverywhere(){ stopAllSounds(); if(MODE==='admin') send('stopall'); }
 function audioPanelHTML(){
-  const names=config.audioNames||{}, loops=config.audioLoop||{}, tgt=config.audioTarget||'admin';
+  const names=config.audioNames||{}, loops=config.audioLoop||{}, lens=config.audioLen||{}, tgt=config.audioTarget||'admin';
   const vol=+(localStorage.getItem('ffVol')||'100');
-  const rows=CUES.map(c=>{ const has=!!names[c.k]; return `<div class="row" style="align-items:center;border-top:1px solid #1e2c52;padding:6px 0;flex-wrap:wrap">
-    <b style="min-width:230px">${c.cat==='music'?'🎵':'🔔'} ${esc(c.label)}</b>
-    <span class="mut" style="min-width:160px">${has?('📄 '+esc(names[c.k])):'— built-in synth —'}</span>
+  const rows=CUES.map(c=>{ const has=!!names[c.k]; const music=c.cat==='music'; const isClock=(c.k==='fmclock');
+    const lenCtrl = isClock
+      ? '<span class="mut" style="margin-left:4px">⏱ auto — runs for the round timer</span>'
+      : (music ? `<label class="mut" style="margin-left:4px">stop after <input type="number" min="0" value="${(+lens[c.k])||0}" data-chg="audio-len|${c.k}" style="width:52px"> s</label>` : '');
+    return `<div class="row" style="align-items:center;border-top:1px solid #1e2c52;padding:6px 0;flex-wrap:wrap">
+    <b style="min-width:230px">${music?'🎵':'🔔'} ${esc(c.label)}</b>
+    <span class="mut" style="min-width:150px">${has?('📄 '+esc(names[c.k])):'— built-in synth —'}</span>
     <button class="btn sm" data-act="audio-test|${c.k}">▶ Test</button>
     <label class="btn sm gold" style="cursor:pointer;margin:0">⬆ Upload<input type="file" accept="audio/*" data-chg="audio-file|${c.k}" style="display:none"></label>
     ${has?`<button class="btn sm red" data-act="audio-clear|${c.k}">↺ synth</button>`:''}
-    ${c.cat==='music'?`<label class="mut" style="margin-left:4px"><input type="checkbox" ${loops[c.k]?'checked':''} data-chg="audio-loop|${c.k}"> loop</label>`:''}
+    ${(music&&!isClock)?`<label class="mut" style="margin-left:4px"><input type="checkbox" ${loops[c.k]?'checked':''} data-chg="audio-loop|${c.k}"> loop</label>`:''}
+    ${lenCtrl}
   </div>`; }).join('');
   return `<div class="row" style="margin-bottom:8px">
       <label class="mut">Play sounds on:
@@ -840,7 +866,7 @@ function audioPanelHTML(){
       <label class="mut">Volume <input type="range" min="0" max="100" value="${vol}" data-inp="audio-vol" style="width:120px"> <span id="audioVolLbl">${vol}%</span></label>
       <button class="btn sm" data-act="audio-stop">⏹ Stop music</button>
     </div>
-    <div class="mut" style="margin-bottom:6px">Upload your own MP3s (e.g. made in ElevenLabs). Each cue falls back to the built-in synth sound if nothing is uploaded. Files are stored in <b>this computer's browser</b> and play on the device selected above. Tick <b>loop</b> for music that should repeat (e.g. the idle theme). Use <b>▶ Test</b> as a manual trigger during a show.</div>
+    <div class="mut" style="margin-bottom:6px">Upload your own MP3s (e.g. made in ElevenLabs). Each cue falls back to the built-in synth sound if nothing is uploaded. Files are stored in <b>this computer's browser</b> and play on the device selected above. <b>stop after N s</b> auto-cuts a clip after that many seconds (0 = play to its end) — so you never have to trim the MP3. The <b>Fast Money clock</b> auto-matches the round timer. Use <b>▶ Test</b> as a manual trigger.</div>
     ${rows}`;
 }
 
@@ -1588,10 +1614,11 @@ function fmTimerCtl(cmd){
   const t=state.fm.timer;
   if(cmd==='set'){ stopFMTick(); t.dur=(state.fm.stage===0?config.t1:config.t2); t.rem=t.dur; t.run=false; t.started=false; }
   else if(cmd==='start'&&!t.run&&t.rem>0){ t.run=true;t.started=true;
-    fmTickInt=setInterval(()=>{ t.rem--; if(t.rem<=0){t.rem=0;t.run=false;stopFMTick();sfx('timesup');} pushState(); },1000);
+    sfx('fmclock', t.rem);   // play the countdown bed for exactly the time remaining
+    fmTickInt=setInterval(()=>{ t.rem--; if(t.rem<=0){t.rem=0;t.run=false;stopFMTick();stopCue();sfx('timesup');} pushState(); },1000);
     try{ startDictation(); }catch(e){}   // starting the clock arms the mic for capturing answers
-  }else if(cmd==='pause'){ t.run=false; stopFMTick(); }
-  else if(cmd==='reset'){ stopFMTick(); state.fm.timer={rem:0,dur:t.dur||config.t1,run:false,started:false}; }   // back to 0:00
+  }else if(cmd==='pause'){ t.run=false; stopFMTick(); stopCue(); }
+  else if(cmd==='reset'){ stopFMTick(); stopCue(); state.fm.timer={rem:0,dur:t.dur||config.t1,run:false,started:false}; }   // back to 0:00
   pushState();
 }
 /* Continuous mic session: started ONCE (one permission prompt) and kept
@@ -2200,7 +2227,7 @@ const ACT={
   buzzreset(){ state.buzz={armed:false,winner:null}; pushState(); },
   sound(a){ sfx(a[0]); },
   'audio-test'(a){ playSound(a[0]); },
-  'audio-stop'(){ stopMusic(); },
+  'audio-stop'(){ stopCue(); },
   'audio-clear'(a){ const k=a[0]; audioDel(k).then(()=>{ if(AUDIO[k]){URL.revokeObjectURL(AUDIO[k]);delete AUDIO[k];} if(config.audioNames)delete config.audioNames[k]; saveConfig(); renderAdmin(); }); },
   /* fast money */
   'fm-stage':a=>setFMStage(+a[0]),
@@ -2295,6 +2322,7 @@ const CHG={
     audioPut(k,f).then(()=>{ if(!config.audioNames)config.audioNames={}; config.audioNames[k]=f.name; saveConfig(); return loadAudio(); })
       .then(()=>renderAdmin()).catch(()=>alert('Could not save that audio file.')); },
   'audio-loop'(a,el){ if(!config.audioLoop)config.audioLoop={}; config.audioLoop[a[0]]=el.checked; saveConfig(); },
+  'audio-len'(a,el){ if(!config.audioLen)config.audioLen={}; config.audioLen[a[0]]=Math.max(0,+el.value||0); saveConfig(); },
   cfg(a,el){ const k=a[0]; const strKeys=['lang','aiKey','aiModel','fmWinMsg','fmLoseMsg','audioTarget','operatorName']; config[k]=strKeys.includes(k)?el.value:Math.max(1,+el.value||0); saveConfig();
     if(k==='operatorName' && isOwner){ claimControl(); }   // re-broadcast the panel's name to devices
     if(k==='t1'||k==='t2'){const fm=state.fm; if(fm&&!fm.timer.started){const dur=fm.stage===0?config.t1:config.t2; fm.timer={rem:dur,dur,run:false,started:false}; pushState();}} },
@@ -2577,6 +2605,7 @@ else if(MODE==='admin'){
   };
   $('#undoBtn').onclick=undo;
   $('#shortcutsBtn').onclick=()=>toggleShortcuts(true);
+  $('#stopSoundsBtn').onclick=stopAllSoundsEverywhere;
   $('#shortcutsClose').onclick=()=>toggleShortcuts(false);
   $('#shortcutsOv').addEventListener('click',ev=>{ if(ev.target.id==='shortcutsOv') toggleShortcuts(false); });
   $('#aiGenerate').onclick=runAIEdit;
