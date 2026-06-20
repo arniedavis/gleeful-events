@@ -753,6 +753,7 @@ function beep(o){
 const SOUND={
   // bright "correct!" ding
   ding(){ beep({f:988,d:.5,type:'sine',v:.5}); beep({f:1319,d:.7,type:'sine',v:.4,when:.04}); beep({f:1976,d:.5,type:'sine',v:.16,when:.05}); },
+  surveysays(){ beep({f:988,d:.5,type:'sine',v:.5}); beep({f:1319,d:.7,type:'sine',v:.4,when:.04}); beep({f:1976,d:.5,type:'sine',v:.16,when:.05}); },
   // harsh "EH-EHHH" wrong-answer buzzer (two pulses)
   strike(){ [0,.34].forEach(w=>{ beep({f:160,d:.3,type:'sawtooth',v:.55,when:w}); beep({f:120,d:.3,type:'square',v:.42,when:w}); beep({f:90,d:.3,type:'sawtooth',v:.38,when:w}); }); },
   // face-off bell rush
@@ -789,17 +790,19 @@ const CUES=[
   {k:'award',label:'Points awarded',cat:'sfx'},
   {k:'duplicate',label:'Duplicate answer',cat:'sfx'},
   {k:'swap',label:'Player exchange / podium swap',cat:'music'},
+  {k:'roundwin',label:'Round winner announced (plays during the pop-up)',cat:'music'},
   {k:'roundchange',label:'Round transition',cat:'music'},
   {k:'gamewin',label:'Win the game (champions)',cat:'music'},
   {k:'fmp2',label:'Fast Money — Player 2 entrance music',cat:'music'},
   {k:'fmclock',label:'Fast Money clock (plays while the timer counts down)',cat:'music'},
   {k:'yousaid',label:'Fast Money — "You said…" reveal',cat:'sfx'},
+  {k:'surveysays',label:'Fast Money — "Survey says" points reveal',cat:'sfx'},
   {k:'timesup',label:'Fast Money — time’s up',cat:'sfx'},
   {k:'fmzero',label:'Fast Money — no match',cat:'sfx'},
   {k:'fmwin',label:'Fast Money — WIN',cat:'music'},
   {k:'lose',label:'Fast Money — loss',cat:'music'}
 ];
-const MUSIC_CUES=new Set(['theme','swap','roundchange','gamewin','fmp2','fmclock','fmwin','lose']);
+const MUSIC_CUES=new Set(['theme','swap','roundwin','roundchange','gamewin','fmp2','fmclock','fmwin','lose']);
 let AUDIO={};            // cue -> objectURL for uploaded files (this device only)
 let curMusic=null;       // currently-playing looping/music element
 let activeAudio=new Set();// every Audio element currently playing (so we can stop them all)
@@ -851,11 +854,13 @@ function playSound(n,maxOverride){
       // auto-stop after the cue's configured length (so you never have to trim the MP3)
       const len = maxOverride!=null ? maxOverride : ((config.audioLen&&+config.audioLen[n])||0);
       if(len>0){ setTimeout(()=>{ try{a.pause();}catch(e){} activeAudio.delete(a); if(curMusic===a)curMusic=null; }, len*1000); }
+      return a;   // return the element so callers (e.g. Test) can stop it
     }catch(e){}
     return;
   }
   try{ensureAC(); if(SOUND[n])SOUND[n]();}catch(e){}
 }
+let testAudio=null, testCue=null;   // the clip currently previewed by the ▶ Test button
 function sfx(n,maxOverride){
   // All cues play on the ADMIN laptop — that's where the uploaded files live AND where the
   // mixer is plugged in. (The scoreboard/host are visual only.)
@@ -1268,7 +1273,7 @@ function renderAdmin(){
     } }
   { const g=$('#admGameName'); if(g) g.textContent=state.gameName||config.gameName||'Friendly Feud'; }
   // round-end announcement popup (fires once when a round is awarded)
-  if(state.view==='round' && state.awarded && state.awardedTo!=null){ if(!roundEndShown){ roundEndShown=true; recordRound(); openRoundEnd(); } }
+  if(state.view==='round' && state.awarded && state.awardedTo!=null){ if(!roundEndShown){ roundEndShown=true; recordRound(); sfx('roundwin'); openRoundEnd(); } }
   else { roundEndShown=false; }
   renderViewBar();
   if(curTab==='game')renderGame();
@@ -1288,7 +1293,9 @@ function renderViewBar(){
   const s=state, vb=$('#viewBar'); if(!vb)return;
   const b=(v,l)=>`<button class="btn ${s.view===v?'gold':''}" data-act="view|${v}">${l}</button>`;
   const scores=[0,1].map(i=>{const t=s.teams[i];return `<span class="vbScore"><b style="color:${esc(t.color)}">${esc(t.name||('Team '+(i+1)))}</b> ${t.score}</span>`;}).join('');
-  vb.innerHTML=`<span class="vbLabel">Scoreboard</span>${b('idle','🏠 Idle')}${b('faceoff','🔔 Face-Off')}${b('round','🎯 Round')}${b('fastmoney','💰 Fast Money')}<span style="flex:1"></span>${scores}`;
+  const playing = curMusic && !curMusic.paused;
+  const musicBtn = `<button class="btn ${playing?'green toggled':''}" data-act="music-toggle" style="font-weight:800;margin-left:10px" title="Stop or resume the music that's currently playing">${playing?'🔊 Music ON':'🔇 Music OFF'}</button>`;
+  vb.innerHTML=`<span class="vbLabel">Scoreboard</span>${b('idle','🏠 Idle')}${b('faceoff','🔔 Face-Off')}${b('round','🎯 Round')}${b('fastmoney','💰 Fast Money')}${musicBtn}<span style="flex:1"></span>${scores}`;
 }
 function collapseKey(txt){ return (String(txt).split(/[—·(]/)[0]||'').toLowerCase().replace(/[0-9]+/g,'').replace(/[^a-z]+/g,'-').replace(/^-+|-+$/g,'')||'block'; }
 function collapseScope(){ return (curTab==='game') ? ('view:'+(state.view||'idle')) : ('tab:'+curTab); }
@@ -2252,8 +2259,13 @@ const ACT={
   buzzmanual(a){ state.buzz.armed=true; state.buzz.winner=null; buzzTrigger(+a[0]); },
   buzzreset(){ state.buzz={armed:false,winner:null}; pushState(); },
   sound(a){ sfx(a[0]); },
-  'audio-test'(a){ playSound(a[0]); },
+  'audio-test'(a){ const k=a[0];
+    // stop whatever the Test button is currently previewing
+    if(testAudio){ try{testAudio.pause();}catch(e){} activeAudio.delete(testAudio); if(curMusic===testAudio)curMusic=null; const prev=testCue; testAudio=null; testCue=null; if(prev===k) return; }   // same button again → just stop
+    const el=playSound(k); if(el){ testAudio=el; testCue=k; el.addEventListener('ended',()=>{ if(testAudio===el){testAudio=null;testCue=null;} }); }
+  },
   'audio-stop'(){ stopCue(); },
+  'music-toggle'(){ if(curMusic){ if(curMusic.paused) curMusic.play().catch(()=>{}); else curMusic.pause(); } refreshStatus(); },
   'audio-export'(){ exportSoundPack(); },
   'audio-clear'(a){ const k=a[0]; audioDel(k).then(()=>{ if(AUDIO[k]){URL.revokeObjectURL(AUDIO[k]);delete AUDIO[k];} if(config.audioNames)delete config.audioNames[k]; saveConfig(); renderAdmin(); }); },
   /* fast money */
@@ -2268,7 +2280,7 @@ const ACT={
   'fm-ans-show'(a){ const c=state.fm.cells[+a[0]]; c.ansShown[+a[1]]=!c.ansShown[+a[1]]; lastFMCell={slot:+a[0],p:+a[1]}; if(c.ansShown[+a[1]]) sfx('yousaid'); pushState(); },
   'fm-pts-reveal'(a){ const c=state.fm.cells[+a[0]]; const p=+a[1];
     c.ptsShown[p]=!c.ptsShown[p];
-    if(c.ptsShown[p]) sfx((Number(c.pts[p])||0)>0 ? 'ding' : 'fmzero');
+    if(c.ptsShown[p]) sfx((Number(c.pts[p])||0)>0 ? 'surveysays' : 'fmzero');
     if(state.fm.autoResult && !state.fm.result){
       // WIN the moment 200 is reached (even during Player 1); LOSE only once both
       // players are done and all answers are scored without reaching the target.
