@@ -314,7 +314,6 @@ body.host{background:#0a1020;color:#eef3ff;font-family:Arial,Helvetica,sans-seri
       <button class="btn" id="openHostBtn">🎙 Open Host Panel</button>
       <button class="btn" id="undoBtn" title="Undo the last action" disabled>↶ Undo</button>
       <button class="btn" id="shortcutsBtn" title="Keyboard shortcuts (press ? )">⌨ Shortcuts</button>
-      <button class="btn" id="stopSoundsBtn" title="Immediately stop any sound or music that's playing">🔇 Stop Sounds</button>
       <button class="btn" id="newGameBtn">🔄 New Game</button>
       <button class="btn red" id="resetAllBtn" title="Erase EVERYTHING — team names, players, FM picks and scores">⚠ Reset All</button>
       <button class="btn" id="undoResetBtn" title="Restore everything the last Reset All erased" style="display:none">↩ Undo Reset All</button>
@@ -784,6 +783,7 @@ const SOUND={
    feeds the mixer; nothing large is synced over the network. */
 const CUES=[
   {k:'theme',label:'Idle / opening theme',cat:'music'},
+  {k:'faceoffmusic',label:'Face-Off music (plays when you switch to Face-Off)',cat:'music'},
   {k:'buzzin',label:'Face-off buzz-in',cat:'sfx'},
   {k:'ding',label:'Correct answer (ding)',cat:'sfx'},
   {k:'strike',label:'Strike (X buzzer)',cat:'sfx'},
@@ -802,7 +802,7 @@ const CUES=[
   {k:'fmwin',label:'Fast Money — WIN',cat:'music'},
   {k:'lose',label:'Fast Money — loss',cat:'music'}
 ];
-const MUSIC_CUES=new Set(['theme','swap','roundwin','roundchange','gamewin','fmp2','fmclock','fmwin','lose']);
+const MUSIC_CUES=new Set(['theme','faceoffmusic','swap','roundwin','roundchange','gamewin','fmp2','fmclock','fmwin','lose']);
 let AUDIO={};            // cue -> objectURL for uploaded files (this device only)
 let curMusic=null;       // currently-playing looping/music element
 let activeAudio=new Set();// every Audio element currently playing (so we can stop them all)
@@ -2113,7 +2113,7 @@ const ACT={
   view(a){ state.view=a[0];
     if(a[0]==='faceoff'){state.buzz={armed:true,winner:null}; state.faceoffWinner=null; state.playPass=null; state.foPhase=false; state.foBuzz=null; state.foReveals=[]; state.foBuzzStruck=false;}
     if(a[0]==='fastmoney'&&!state.fm)state.fm=newFM();
-    if(a[0]==='idle') sfx('theme'); else stopCue();   // idle theme bed (admin); stop it on any other view
+    if(a[0]==='idle') sfx('theme'); else if(a[0]==='faceoff') sfx('faceoffmusic'); else stopCue();   // idle theme / face-off bed; stop music on other views
     pushState(); },
   /* Face-off decided (manual override): the team with the top answer chooses Play or Pass. */
   faceoffwin(a){ decideFaceoff(+a[0]); },
@@ -2644,7 +2644,6 @@ else if(MODE==='admin'){
   };
   $('#undoBtn').onclick=undo;
   $('#shortcutsBtn').onclick=()=>toggleShortcuts(true);
-  $('#stopSoundsBtn').onclick=stopAllSoundsEverywhere;
   $('#shortcutsClose').onclick=()=>toggleShortcuts(false);
   $('#shortcutsOv').addEventListener('click',ev=>{ if(ev.target.id==='shortcutsOv') toggleShortcuts(false); });
   $('#aiGenerate').onclick=runAIEdit;
