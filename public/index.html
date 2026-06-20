@@ -853,7 +853,7 @@ function playSound(n,maxOverride){
       a.play().catch(()=>{});
       // auto-stop after the cue's configured length (so you never have to trim the MP3)
       const len = maxOverride!=null ? maxOverride : ((config.audioLen&&+config.audioLen[n])||0);
-      if(len>0){ setTimeout(()=>{ try{a.pause();}catch(e){} activeAudio.delete(a); if(curMusic===a)curMusic=null; }, len*1000); }
+      if(len>0){ setTimeout(()=>{ try{a.pause();}catch(e){} }, len*1000); }   // cap the length, but keep it as curMusic so "Music ON" can extend it
       return a;   // return the element so callers (e.g. Test) can stop it
     }catch(e){}
     return;
@@ -1294,7 +1294,7 @@ function renderViewBar(){
   const b=(v,l)=>`<button class="btn ${s.view===v?'gold':''}" data-act="view|${v}">${l}</button>`;
   const scores=[0,1].map(i=>{const t=s.teams[i];return `<span class="vbScore"><b style="color:${esc(t.color)}">${esc(t.name||('Team '+(i+1)))}</b> ${t.score}</span>`;}).join('');
   const playing = curMusic && !curMusic.paused;
-  const musicBtn = `<button class="btn ${playing?'green toggled':''}" data-act="music-toggle" style="font-weight:800;margin-left:10px" title="Stop or resume the music that's currently playing">${playing?'🔊 Music ON':'🔇 Music OFF'}</button>`;
+  const musicBtn = `<button class="btn big ${playing?'green toggled':''}" data-act="music-toggle" style="font-weight:900;margin-left:14px;font-size:16px;padding:10px 18px;${playing?'':'border:2px solid var(--gold2)'}" title="Stop the current music early, or click again to extend/resume it">${playing?'🔊 MUSIC ON — click to stop':'🔇 MUSIC OFF — click to play'}</button>`;
   vb.innerHTML=`<span class="vbLabel">Scoreboard</span>${b('idle','🏠 Idle')}${b('faceoff','🔔 Face-Off')}${b('round','🎯 Round')}${b('fastmoney','💰 Fast Money')}${musicBtn}<span style="flex:1"></span>${scores}`;
 }
 function collapseKey(txt){ return (String(txt).split(/[—·(]/)[0]||'').toLowerCase().replace(/[0-9]+/g,'').replace(/[^a-z]+/g,'-').replace(/^-+|-+$/g,'')||'block'; }
