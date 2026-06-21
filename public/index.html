@@ -595,7 +595,7 @@ function getScripts(){ return Object.assign({}, DEFAULT_SCRIPTS, config.scripts|
 function newFM(){
   return {selQs:[0,1,2,3,4].map(i=>Math.min(i,bank.fast.length-1)),stage:0,result:null,autoResult:true,pNames:['Player 1','Player 2'],
     timer:{rem:0,dur:config.t1,run:false,started:false},
-    cells:Array.from({length:5},()=>({ans:['',''],pts:[0,0],ansShown:[false,false],ptsShown:[false,false]}))};
+    cells:Array.from({length:5},()=>({ans:['',''],pts:[0,0],ansShown:[false,false],ptsShown:[false,false],pass:[false,false]}))};
 }
 function newState(){
   const n = i=>Math.min(i,Math.max(0,bank.main.length-1));
@@ -793,7 +793,9 @@ const SOUND={
   // player exchange / podium swap — short rising sting
   swap(){ [440,587,784].forEach((f,i)=>beep({f,d:.18,type:'triangle',v:.4,when:i*.1})); },
   // round transition — quick brassy bumper
-  roundchange(){ [523,659,523,784].forEach((f,i)=>beep({f,d:.16,type:'square',v:.4,when:i*.12})); beep({f:1047,d:.4,type:'triangle',v:.3,when:.5}); }
+  roundchange(){ [523,659,523,784].forEach((f,i)=>beep({f,d:.16,type:'square',v:.4,when:i*.12})); beep({f:1047,d:.4,type:'triangle',v:.3,when:.5}); },
+  // clock-set — "X seconds on the clock": a quick two-note ready chime
+  clockset(){ beep({f:659,d:.16,type:'triangle',v:.45}); beep({f:988,d:.32,type:'triangle',v:.4,when:.14}); beep({f:1319,d:.3,type:'sine',v:.22,when:.16}); }
 };
 
 /* ===== Uploaded audio (e.g. ElevenLabs MP3s), stored per-device in IndexedDB =====
@@ -814,6 +816,7 @@ const CUES=[
   {k:'gamewin',label:'Win the game (champions)',cat:'music'},
   {k:'fmp2',label:'Fast Money — Player 2 entrance music',cat:'music'},
   {k:'fmclock',label:'Fast Money clock (plays while the timer counts down)',cat:'music'},
+  {k:'clockset',label:'Fast Money — "X seconds on the clock" (plays when you Set the timer)',cat:'sfx'},
   {k:'yousaid',label:'Fast Money — "You said…" reveal',cat:'sfx'},
   {k:'surveysays',label:'Fast Money — "Survey says" points reveal',cat:'sfx'},
   {k:'timesup',label:'Fast Money — time’s up',cat:'sfx'},
@@ -1010,7 +1013,7 @@ function boardRender(s){
       <div class="fmGrid"><div class="fmHead"><div>${esc((fm.pNames&&fm.pNames[0])||'Player 1')}</div><div>${esc((fm.pNames&&fm.pNames[1])||'Player 2')}</div></div>${rows.join('')}
         <div class="fmTotal ${total>=config.target?'hit':''}"><span>TOTAL</span><span>${total} / ${config.target}${total>=config.target?' 🎉':''}</span></div>
       </div>
-      ${fm.result==='win'?`<div class="fmResult win">${esc(config.fmWinMsg||'🎉 You Won! 🎉')}</div>`:(fm.result==='lose'?`<div class="fmResult lose">${esc(config.fmLoseMsg||'Awwwwww…')}</div>`:'')}
+      ${(fm.result && !fm.hideResult)?(fm.result==='win'?`<div class="fmResult win">${esc(config.fmWinMsg||'🎉 You Won! 🎉')}</div>`:`<div class="fmResult lose">${esc(config.fmLoseMsg||'Awwwwww…')}</div>`):''}
     </div>`;
   }
   else if(s.view==='winner' && s.winner!=null){
@@ -1038,7 +1041,7 @@ function boardRender(s){
   if(wm) wm.classList.toggle('hidden', !(s.view==='round'||s.view==='faceoff'||s.view==='fastmoney'));
   // confetti — game winner, a Fast Money win, and round-winner announcements
   if(s.view==='winner') startConfetti(s.teams[s.winner]?.color);
-  else if(s.view==='fastmoney' && s.fm.result==='win') startConfetti('#e3b341');
+  else if(s.view==='fastmoney' && s.fm.result==='win' && !s.fm.hideResult) startConfetti('#e3b341');
   else if(s.view==='round' && s.awarded && s.awardedTo!=null && !s.revealLeftover) startConfetti(s.teams[s.awardedTo]?.color);
   else stopConfetti();
 }
@@ -1200,8 +1203,10 @@ function hostRender(s){
   if(s.view==='fastmoney'){
     const fm=s.fm;
     const list=fm.selQs.map((qi,slot)=>{const fq=(bank.fast&&bank.fast[qi])||{q:''};
-      const shown = fm.cells[slot] && (fm.cells[slot].ptsShown[0]||fm.cells[slot].ptsShown[1]);
-      return `<div class="fq"><b>Q${slot+1}.</b> ${esc(fq.q||'…')}${shown?' <span class="mut">(revealed)</span>':''}</div>`;}).join('');
+      const cell=fm.cells[slot];
+      const shown = cell && (cell.ptsShown[0]||cell.ptsShown[1]);
+      const passed = cell && cell.pass && cell.pass[fm.stage] && !(cell.ans[fm.stage]||'').trim();
+      return `<div class="fq"${passed?' style="color:#ff6b6b;font-weight:700"':''}><b>Q${slot+1}.</b> ${esc(fq.q||'…')}${passed?' <span style="color:#ff6b6b">⟳ PASSED</span>':(shown?' <span class="mut">(revealed)</span>':'')}</div>`;}).join('');
     fmBlock=`<div class="h-card h-fmlist"><h3>Fast Money — ${esc(fmPNameFor(s,0))} &amp; ${esc(fmPNameFor(s,1))}</h3>${list}</div>`;
     // After the result, give the host the #1 survey answer for each question to read out
     // (host reference only — the scoreboard is NOT changed by this).
@@ -1578,14 +1583,16 @@ function renderFMTab(){
   const rows=fm.selQs.map((qi,slot)=>{
     const q=bank.fast[qi]||{q:'',answers:[]}, c=fm.cells[slot];
     const chips=q.answers.map(a=>`<span class="chip" data-act="fm-chip|${slot}|${a[1]}" title="set points for Player ${fm.stage+1}">${esc(a[0])} · ${a[1]}</span>`).join('');
+    const pass=(c.pass&&c.pass[0]!==undefined)?c.pass:[false,false];
     const pair=p=>`
       <div class="fmPair">
         <span class="mut">P${p+1}</span>
-        <input type="text" id="fm-a-${slot}-${p}" value="${esc(c.ans[p])}" placeholder="answer given…" data-chg="fm-ans|${slot}|${p}">
+        <input type="text" id="fm-a-${slot}-${p}" value="${esc(c.ans[p])}" placeholder="${pass[p]?'⟳ PASSED — come back':'answer given…'}" data-chg="fm-ans|${slot}|${p}" style="${pass[p]?'background:#5a4a12;border-color:#e3b341;color:#ffe9a3':''}">
         <button class="micBtn ${micState&&micState.q===slot&&micState.p===p?'live':''}" data-act="fm-mic|${slot}|${p}" title="speak the answer">🎤</button>
         <input type="number" id="fm-p-${slot}-${p}" value="${c.pts[p]||0}" data-chg="fm-pts|${slot}|${p}">
         <button class="btn sm ${c.ansShown[p]?'toggled':'blue'}" data-act="fm-ans-show|${slot}|${p}">${c.ansShown[p]?'said ✓':'🗣 "You said…"'}</button>
         <button class="btn sm ${c.ptsShown[p]?'toggled':'gold'}" data-act="fm-pts-reveal|${slot}|${p}">${c.ptsShown[p]?'survey ✓':'📊 "Survey says…"'}</button>
+        <button class="btn sm ${pass[p]?'gold toggled':''}" data-act="fm-pass|${slot}|${p}" title="mark this answer PASSED — highlights it to come back to">⟳ Pass</button>
         <button class="btn sm red" data-act="fm-dup|${slot}|${p}" title="duplicate answer — buzz + clear">DUP</button>
       </div>`;
     return `<div class="fmAdmRow"><div class="q">Q${slot+1}. ${esc(q.q)}</div>${pair(0)}${pair(1)}<div>${chips}</div></div>`;
@@ -1660,7 +1667,7 @@ function fmTimerCtl(cmd){
   const t=state.fm.timer;
   if(cmd==='set'){ stopFMTick(); const dur=(state.fm.stage===0?config.t1:config.t2);
       if(t.rem>0 && !t.run){ t.rem=0; }   // already set (and not running) → clear back to 0:00
-      else { t.dur=dur; t.rem=dur; }
+      else { t.dur=dur; t.rem=dur; sfx('clockset'); }   // loading time onto the clock → play the "X seconds" cue
       t.run=false; t.started=false; }
   else if(cmd==='start'&&!t.run&&t.rem>0){ t.run=true;t.started=true;
     sfx('fmclock', t.rem);   // play the countdown bed for exactly the time remaining
@@ -1743,7 +1750,14 @@ function startDictation(){
       const txt=(ev.results[i][0].transcript||'').trim().replace(/[.,!?;:]+$/,'').trim();
       if(!txt || micSeq>4) continue;
       const slot=micSeq, c=state.fm.cells[slot];
-      c.ans[stage]=txt;
+      if(!c.pass)c.pass=[false,false];
+      if(/^(pass|i pass|skip|skip it|no answer|pass on (it|this))$/.test(txt.toLowerCase())){   // contestant passed — flag it, leave blank, move on
+        c.pass[stage]=true; c.ans[stage]=''; c.pts[stage]=0;
+        micSeq=slot+1; micState = micSeq<=4 ? {q:micSeq,p:stage} : null;
+        pushState(); if(micSeq>4){ try{rec.stop();}catch(e){} }
+        continue;
+      }
+      c.pass[stage]=false; c.ans[stage]=txt;
       if(fmCheckDup(slot)){            // duplicate: buzzer already fired, cell cleared — retry same slot
         micState={q:slot,p:stage};
       }else{
@@ -2305,15 +2319,20 @@ const ACT={
       else if(fmGameComplete()){ state.fm.result='lose'; sfx('lose'); }
     }
     pushState(); },
-  'fm-clear-answers'(){ const p=state.fm.stage; state.fm.cells.forEach(c=>{ c.ans[p]=''; c.pts[p]=0; c.ansShown[p]=false; c.ptsShown[p]=false; }); micSeq=0; pushState(); },
+  'fm-clear-answers'(){ const p=state.fm.stage; state.fm.cells.forEach(c=>{ c.ans[p]=''; c.pts[p]=0; c.ansShown[p]=false; c.ptsShown[p]=false; if(c.pass)c.pass[p]=false; }); micSeq=0; pushState(); },
   'fm-dup'(a){ const c=state.fm.cells[+a[0]],p=+a[1]; sfx('duplicate');
-    c.ans[p]='';c.pts[p]=0;c.ansShown[p]=false;c.ptsShown[p]=false; pushState(); },
+    c.ans[p]='';c.pts[p]=0;c.ansShown[p]=false;c.ptsShown[p]=false; if(c.pass)c.pass[p]=false; pushState(); },
+  'fm-pass'(a){ const c=state.fm.cells[+a[0]],p=+a[1]; if(!c.pass)c.pass=[false,false];
+    c.pass[p]=!c.pass[p];
+    if(c.pass[p]){ c.ans[p]=''; c.pts[p]=0; c.ansShown[p]=false; c.ptsShown[p]=false; }
+    pushState(); },
   'fm-celebrate'(){ sfx('fmwin'); },
   'fm-result'(){ const win=fmTotal()>=config.target; state.fm.result=win?'win':'lose'; sfx(win?'fmwin':'lose'); pushState(); },
-  'fm-result-clear'(){ state.fm.result=null; pushState(); },
+  'fm-result-clear'(){ state.fm.result=null; state.fm.hideResult=false; pushState(); },
   'fm-reveal-all'(){   // show every answer + its survey points (and the #1 survey answer) so the audience sees them
     state.fm.cells.forEach(c=>{ for(let p=0;p<2;p++){ if((c.ans[p]||'').trim()) c.ansShown[p]=true; c.ptsShown[p]=true; } });
     if(state.fm.autoResult && !state.fm.result){ if(fmTotal()>=config.target) state.fm.result='win'; else if(fmGameComplete()) state.fm.result='lose'; }
+    state.fm.hideResult=true;   // hide the "You Won" / confetti overlay so the revealed board is unobstructed
     pushState(); },
   'mic-enable'(){ enableMic(); },
   'fm-reset'(){ uiConfirm('Clear the Fast Money board?',()=>{ const sq=state.fm.selQs; state.fm=newFM(); state.fm.selQs=sq; stopFMTick(); pushState(); },'Clear'); },
@@ -2365,6 +2384,7 @@ const CHG={
   showq(a,el){ state.showQ=el.checked; pushState(); },
   'fm-sel'(a,el){ state.fm.selQs[+a[0]]=+el.value; pushState(); },
   'fm-ans'(a,el){ const c=state.fm.cells[+a[0]],p=+a[1]; c.ans[p]=el.value; lastFMCell={slot:+a[0],p};
+    if(c.pass && el.value.trim()) c.pass[p]=false;   // typing a real answer clears the PASS flag
     if(!fmCheckDup(+a[0])) fmAutoPoints(+a[0],p);
     pushState(); },
   'fm-pts'(a,el){ state.fm.cells[+a[0]].pts[+a[1]]=+el.value||0; pushState(); },
