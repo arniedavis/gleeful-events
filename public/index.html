@@ -47,6 +47,7 @@ body.board{overflow:hidden;user-select:none;cursor:default}
 .b-banner{font-family:var(--showfont);font-size:6.5vh;letter-spacing:.5vh;color:#ffd86b;margin-bottom:.6vh;text-align:center;line-height:1.05;
   text-shadow:0 .2vh 0 #c9962a,0 .4vh 0 #b9861f,0 .6vh 0 #9a6f16,0 .85vh 0 #7d5a10,0 1.1vh 1.8vh rgba(0,0,0,.65)}
 .b-question{font-family:Arial;font-weight:700;font-size:3.2vh;color:#dbe5ff;max-width:72vw;text-align:center;margin-bottom:1vh;min-height:0}
+.b-fit{white-space:nowrap;max-width:70vw;margin-left:auto;margin-right:auto}
 .b-winners{font-family:var(--showfont);font-size:7.6vh;letter-spacing:.4vh;color:#bff0c8;margin-bottom:.6vh;text-align:center;line-height:1.04;
   text-shadow:0 .2vh 0 #2e8b46,0 .4vh 0 #246e38,0 .6vh 0 #18512a,0 1.2vh 2.2vh rgba(0,0,0,.7);
   animation:winnerPop .5s cubic-bezier(.2,.8,.3,1.5), shimmer 1.2s ease .5s infinite}
@@ -248,6 +249,9 @@ body.host{background:#0a1020;color:#eef3ff;font-family:Arial,Helvetica,sans-seri
 .h-team .sc{font-size:clamp(30px,7vw,56px);font-weight:900;line-height:1}
 .h-team .ctl{font-size:13px;color:var(--gold1);font-weight:700;min-height:18px}
 .h-mid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.h-bigname{background:#0f1830;border:2px solid var(--gold2);border-radius:14px;padding:18px;margin-bottom:14px;text-align:center;font-family:var(--showfont,inherit);font-weight:900;font-size:clamp(30px,7vw,64px);line-height:1.05;color:#fff;text-transform:uppercase;letter-spacing:.5px}
+.h-bigname .tn{display:block;font-size:.5em;color:var(--gold1);margin-top:6px;letter-spacing:1px}
+.audioRow.dropping{outline:2px dashed var(--gold2);outline-offset:2px;background:rgba(227,179,65,.12)}
 .h-pill{background:#121d36;border:1px solid #25324f;border-radius:10px;padding:8px 14px;font-weight:700;font-size:clamp(13px,2.4vw,16px)}
 .h-pill b{color:var(--gold1)}
 .h-script{background:#0f1830;border:2px solid var(--gold3);border-left:8px solid var(--gold2);border-radius:14px;padding:16px 18px;margin-bottom:14px}
@@ -522,15 +526,14 @@ Tonight it's {teamA} taking on {teamB}. Let's meet our players!
 {captainA}, introduce your team! …And {captainB}, introduce yours!
 >Have each team captain introduce their team, then bring one player from each team up to the face-off podium.`,
  faceoff_pre:
-`It's time for the Face-Off! {podiumA} and {podiumB} — hands on your buzzers.
-We surveyed 100 people and the top {nAnswers} answers are on the board.
+`It's time for the Face-Off! {podiumA} and {podiumB} — join me at the buzzers!
 {multNote}
+{podiumA} and {podiumB} — hands on your buzzers.
+We surveyed 100 people and the top {nAnswers} answers are on the board.
 ?Here's the question: {question}
 >Arm the buzzers, then read the question. First to buzz answers first.`,
  faceoff_post:
-`{buzzPlayer} from {buzzTeam} buzzed in first!
-?{foAsk}, what's your answer?
->Reveal the answer given. If the buzz-in answer isn't #1, the question above switches to the other team's player — ask them next. The higher answer takes control and brings up Play/Pass.`,
+`>Reveal the answer given (the big name above shows who's answering). If the buzz-in answer isn't #1, the name above switches to the other team's player — ask them next. The higher answer takes control and brings up Play/Pass.`,
  faceoff_decide:
 `{faceoffWinner} won the Face-Off!
 ?{faceoffWinner}, do you want to PLAY or PASS?
@@ -542,17 +545,16 @@ We surveyed 100 people and the top {nAnswers} answers are on the board.
 We're looking for {nAnswers} answers — {revealed} revealed so far. Board pot: {pot}.
 >Reveal each correct answer. A wrong/unlisted answer is a strike, and play moves to the next player on the team — {turnPlayer} is up now. Three strikes hands the steal to the other team. Strikes: {strikes}.`,
  round_twostrikes:
-`That's TWO strikes on {control} — one more and the board is up for grabs!
+`{otherTeam} — get ready to STEAL: if {control} gets a third strike, your team gets ONE guess to win!
 {multNote}
-?{turnPlayer}, careful — you've got one strike left. What's your answer?
->{otherTeam} — get ready to STEAL: if {control} gets a third strike, your team gets ONE guess to win {pot} points.`,
+?{turnPlayer}, careful — you've got one strike left. What's your answer?`,
  round_steal:
 `Three strikes! It's a STEAL — {control}, this is your chance!
 ?{control} — one answer to steal the round. What is it?
 >The TEAM confers and gives ONE answer. A correct answer steals the round for {control}; a wrong one gives it to {stealFrom}.`,
  round_awarded:
 `{awarded} win the round with {pot} points!
->Reveal any remaining un-guessed answers one at a time, then move to the next round.`,
+Reveal any remaining un-guessed answers one at a time, then move to the next round.`,
  fm_intro:
 `It's time for Fast Money! {p1} and {p2} are our two players.
 We'll put {p2} in isolation while {p1} plays.
@@ -795,7 +797,11 @@ const SOUND={
   // round transition — quick brassy bumper
   roundchange(){ [523,659,523,784].forEach((f,i)=>beep({f,d:.16,type:'square',v:.4,when:i*.12})); beep({f:1047,d:.4,type:'triangle',v:.3,when:.5}); },
   // clock-set — "X seconds on the clock": a quick two-note ready chime
-  clockset(){ beep({f:659,d:.16,type:'triangle',v:.45}); beep({f:988,d:.32,type:'triangle',v:.4,when:.14}); beep({f:1319,d:.3,type:'sine',v:.22,when:.16}); }
+  clockset(){ beep({f:659,d:.16,type:'triangle',v:.45}); beep({f:988,d:.32,type:'triangle',v:.4,when:.14}); beep({f:1319,d:.3,type:'sine',v:.22,when:.16}); },
+  // disappointed audience "Awwww" — a slow downward glide
+  fmaww(){ [330,294,262,233,208].forEach((f,i)=>beep({f,d:.34,type:'sawtooth',v:.32,when:i*.18})); [262,233,208,185,165].forEach((f,i)=>beep({f,d:.34,type:'triangle',v:.22,when:i*.18})); },
+  // "Reveal All Answers" — a bright ascending reveal sweep
+  revealall(){ [392,523,659,784,1047,1319].forEach((f,i)=>beep({f,d:.22,type:'triangle',v:.4,when:i*.09})); beep({f:1047,d:.7,type:'sine',v:.25,when:.5}); }
 };
 
 /* ===== Uploaded audio (e.g. ElevenLabs MP3s), stored per-device in IndexedDB =====
@@ -821,8 +827,10 @@ const CUES=[
   {k:'surveysays',label:'Fast Money — "Survey says" points reveal',cat:'sfx'},
   {k:'timesup',label:'Fast Money — time’s up',cat:'sfx'},
   {k:'fmzero',label:'Fast Money — no match',cat:'sfx'},
+  {k:'revealall',label:'Fast Money — "Reveal All Answers" pressed',cat:'sfx'},
+  {k:'fmaww',label:'Fast Money — disappointed "Awwww" (plays before the loss music)',cat:'sfx'},
   {k:'fmwin',label:'Fast Money — WIN',cat:'music'},
-  {k:'lose',label:'Fast Money — loss',cat:'music'}
+  {k:'lose',label:'Fast Money — loss music (plays after the Awwww)',cat:'music'}
 ];
 const MUSIC_CUES=new Set(['theme','faceoffmusic','swap','roundwin','roundchange','gamewin','fmp2','fmclock','fmwin','lose']);
 let AUDIO={};            // cue -> objectURL for uploaded files (this device only)
@@ -858,6 +866,12 @@ async function importSoundPack(file){   // load a bundle exported from another l
 async function loadAudio(){ try{ const db=await idbOpen();
    const keys=await new Promise((res,rej)=>{const tx=db.transaction('cues','readonly');const rq=tx.objectStore('cues').getAllKeys();rq.onsuccess=()=>res(rq.result||[]);rq.onerror=()=>rej(rq.error);});
    for(const k of keys){ const b=await idbDo('readonly',st=>st.get(k)); if(b){ if(AUDIO[k])URL.revokeObjectURL(AUDIO[k]); AUDIO[k]=URL.createObjectURL(b);} } }catch(e){} }
+function saveAudioForCue(k,f){   // shared by the Upload button and drag-and-drop
+  if(!f) return Promise.resolve();
+  return audioPut(k,f).then(()=>{ if(!config.audioNames)config.audioNames={}; config.audioNames[k]=f.name; saveConfig(); return loadAudio(); })
+    .then(()=>{ renderAdmin(); uiToast('Loaded “'+f.name+'”.'); })
+    .catch(()=>uiToast('Could not save that audio file.'));
+}
 function stopMusic(){ if(curMusic){ try{curMusic.pause();}catch(e){} curMusic=null; } }
 function stopAllSounds(){   // stop every uploaded clip + looping bed + synth
   stopMusic();
@@ -888,6 +902,17 @@ function sfx(n,maxOverride){
   // mixer is plugged in. (The scoreboard/host are visual only.)
   if(MODE==='admin') playSound(n,maxOverride);
 }
+function fmLoseSequence(){   // disappointed "Awwww" first, THEN the loss music
+  if(MODE!=='admin') return;
+  const aw=playSound('fmaww');                 // returns an Audio element if a file is uploaded, else undefined (synth)
+  if(aw && typeof aw.addEventListener==='function'){
+    let done=false; const go=()=>{ if(done)return; done=true; playSound('lose'); };
+    aw.addEventListener('ended',go);
+    setTimeout(go,4000);                        // safety net if 'ended' never fires
+  } else {
+    setTimeout(()=>playSound('lose'),1600);     // synth Awww is ~1s; give it room before the music
+  }
+}
 function stopCue(){ if(MODE==='admin') stopMusic(); }
 function stopAllSoundsEverywhere(){ stopAllSounds(); if(MODE==='admin') send('stopall'); }
 function audioPanelHTML(){
@@ -897,7 +922,7 @@ function audioPanelHTML(){
     const lenCtrl = isClock
       ? '<span class="mut" style="margin-left:4px">⏱ auto — runs for the round timer</span>'
       : (music ? `<label class="mut" style="margin-left:4px">stop after <input type="number" min="0" value="${(+lens[c.k])||0}" data-chg="audio-len|${c.k}" style="width:52px"> s</label>` : '');
-    return `<div class="row" style="align-items:center;border-top:1px solid #1e2c52;padding:6px 0;flex-wrap:wrap">
+    return `<div class="row audioRow" data-drop="${c.k}" style="align-items:center;border-top:1px solid #1e2c52;padding:6px 0;flex-wrap:wrap">
     <b style="min-width:230px">${music?'🎵':'🔔'} ${esc(c.label)}</b>
     <span class="mut" style="min-width:150px">${has?('📄 '+esc(names[c.k])):'— built-in synth —'}</span>
     <button class="btn sm" data-act="audio-test|${c.k}">▶ Test</button>
@@ -914,7 +939,7 @@ function audioPanelHTML(){
       <button class="btn sm" data-act="audio-export" title="Save all your uploaded sounds + settings as one file to load on another laptop">⬇ Export sound pack</button>
       <label class="btn sm gold" style="cursor:pointer;margin:0" title="Load a sound pack exported from another laptop">⬆ Import sound pack<input type="file" accept=".json,application/json" data-chg="audio-import" style="display:none"></label>
     </div>
-    <div class="mut" style="margin-bottom:6px">Upload your own MP3s (e.g. made in ElevenLabs). Each cue falls back to the built-in synth sound if nothing is uploaded. Files are stored in <b>this computer's browser</b> and every cue plays here on the admin laptop (the scoreboard/host are visual only). <b>stop after N s</b> auto-cuts a clip after that many seconds (0 = play to its end) — so you never have to trim the MP3. The <b>Fast Money clock</b> auto-matches the round timer. Use <b>▶ Test</b> as a manual trigger.</div>
+    <div class="mut" style="margin-bottom:6px">Upload your own MP3s (e.g. made in ElevenLabs). <b>Tip:</b> you can <b>drag an audio file straight onto a cue row</b> — that avoids the file-picker dialog, which can pull a full-screen scoreboard off your TV. Each cue falls back to the built-in synth sound if nothing is uploaded. Files are stored in <b>this computer's browser</b> and every cue plays here on the admin laptop (the scoreboard/host are visual only). <b>stop after N s</b> auto-cuts a clip after that many seconds (0 = play to its end) — so you never have to trim the MP3. The <b>Fast Money clock</b> auto-matches the round timer. Use <b>▶ Test</b> as a manual trigger.</div>
     ${rows}`;
 }
 
@@ -928,6 +953,13 @@ function fitTeamNames(){
     while((el.scrollHeight>el.clientHeight+1 || el.scrollWidth>el.clientWidth+1) && fs>0.9 && guard++<40){
       fs-=0.1; el.style.fontSize=fs+'vh';
     }
+  });
+}
+function fitBanner(){   // shrink the round/announce banner until it fits one line in the centre channel
+  $$('.b-fit').forEach(el=>{
+    el.style.fontSize='';                                   // start from the CSS default
+    let fs=parseFloat(getComputedStyle(el).fontSize), guard=0;
+    while(el.scrollWidth>el.clientWidth+1 && fs>14 && guard++<80){ fs-=2; el.style.fontSize=fs+'px'; }
   });
 }
 function boardRender(s){
@@ -972,11 +1004,11 @@ function boardRender(s){
       }else tiles.push(`<div class="tile"><div class="num">${i+1}</div></div>`);
     }
     const banner =
-      (s.awarded && s.awardedTo!=null) ? `<div class="b-winners">🎉 ${esc(s.teams[s.awardedTo].name)} — ROUND ${s.roundIdx+1} WINNERS! 🎉</div>`
-      : (s.stealMode && s.active!=null) ? `<div class="b-steal">${esc(s.teams[s.active].name)} — STEAL! One answer to win ${s.pot}</div>`
-      : (s.faceoffWinner!=null && s.playPass==null) ? `<div class="b-steal" style="color:var(--gold1)">${esc(s.teams[s.faceoffWinner].name)} WON THE FACE-OFF!</div>`
-      : s.foPhase ? `<div class="b-banner">FACE-OFF — HIGHER ANSWER WINS</div>`
-      : `<div class="b-banner">ROUND ${s.roundIdx+1} · ${multLabel(r.mult)} POINTS</div>`;
+      (s.awarded && s.awardedTo!=null) ? `<div class="b-winners b-fit">🎉 ${esc(s.teams[s.awardedTo].name)} — ROUND ${s.roundIdx+1} WINNERS! 🎉</div>`
+      : (s.stealMode && s.active!=null) ? `<div class="b-steal b-fit">${esc(s.teams[s.active].name)} — STEAL! One answer to win ${s.pot}</div>`
+      : (s.faceoffWinner!=null && s.playPass==null) ? `<div class="b-steal b-fit" style="color:var(--gold1)">${esc(s.teams[s.faceoffWinner].name)} WON THE FACE-OFF!</div>`
+      : s.foPhase ? `<div class="b-banner b-fit">FACE-OFF — HIGHER ANSWER WINS</div>`
+      : `<div class="b-banner b-fit">ROUND ${s.roundIdx+1} · ${multLabel(r.mult)} POINTS</div>`;
     mid=`<div style="text-align:center">
       ${banner}
       ${s.showQ?`<div class="b-question">${esc(q.q)}</div>`:''}
@@ -995,7 +1027,7 @@ function boardRender(s){
         const ansNew = wasC && !wasC.ansShown[p] && c.ansShown[p];
         const ptsNew = wasC && !wasC.ptsShown[p] && c.ptsShown[p];
         if(c.ptsShown[p]) total+=Number(c.pts[p])||0;
-        cells.push(`<div class="fmCell ${hideCol?'masked':''} ${ansNew?'flip':''}">${hideCol?'':(c.ansShown[p]?esc(c.ans[p]):'')}</div>`);
+        cells.push(`<div class="fmCell ${hideCol?'masked':''} ${ansNew?'flip':''}">${hideCol?'':(c.ansShown[p]?((c.ans[p]||'').trim()?esc(c.ans[p]):'( ——————— )'):'')}</div>`);
         cells.push(`<div class="fmCell pts ${hideCol?'masked':''} ${ptsNew?'flip':''}">${hideCol?'':(c.ptsShown[p]?(Number(c.pts[p])||0):'')}</div>`);
       }
       rows.push(`<div class="fmRow">${cells.join('')}</div>`);
@@ -1036,6 +1068,7 @@ function boardRender(s){
   b.classList.toggle('fmview', s.view==='fastmoney');   // top-align Fast Money so the Total stays in view
   // auto-fit team names so long names still fit their box
   fitTeamNames();
+  fitBanner();   // shrink the announce/banner line so the score side-panels never overlap it
   // corner watermark during active play (not idle/winner)
   const wm=$('#watermark');
   if(wm) wm.classList.toggle('hidden', !(s.view==='round'||s.view==='faceoff'||s.view==='fastmoney'));
@@ -1093,6 +1126,13 @@ function fmPNameFor(s,p){ const n=(s.fm&&s.fm.pNames||[])[p]; return (n&&n.trim(
 function foAsker(s){ if(!s.foPhase) return null;   // which {team,idx} is being asked during face-off resolution
   const team=(s.foReveals.length===0 && !s.foBuzzStruck) ? s.foBuzz : (s.foBuzz===0?1:0);
   const idx=(s.podium&&s.podium[team])||0; return {team,idx}; }
+function faceoffCurrent(s){   // who is answering RIGHT NOW in the face-off (buzz player, then the other on a miss)
+  let team=null;
+  if(s.foPhase){ const a=foAsker(s); team=a?a.team:null; }
+  else if(s.buzz && s.buzz.winner!=null){ team=s.buzz.winner; }
+  if(team==null) return null;
+  return { name: podiumName(s,team), team: s.teams[team].name, color: s.teams[team].color };
+}
 function fmTotForP(s,p){ let t=0; (s.fm?s.fm.cells:[]).forEach(c=>{ if(c.ptsShown[p]) t+=Number(c.pts[p])||0; }); return t; }
 function fmCaptured(s,p){ const fm=s.fm; if(!fm)return false; const t=fm.timer;   // answers phase done for player p
   const expired=t&&t.started&&(t.rem<=0); const allAns=fm.cells.every(c=>(c.ans[p]||'').trim()); const anyRev=fm.cells.some(c=>c.ptsShown[p]);
@@ -1241,6 +1281,9 @@ function hostRender(s){
       return `<div class="col"><div class="tt" style="color:${esc(t.color)}">${esc(t.name)}${hdrNote}</div>${ps||'<span class="mut">no players entered</span>'}</div>`;}).join('');
   }
   const scriptHtml=sc.lines.map(l=> l.read!=null?`<p class="read">${esc(l.read)}</p>` : l.q!=null?`<p class="q">“${esc(l.q)}”</p>` : `<p class="cue">▶ ${esc(l.cue)}</p>`).join('');
+  // Big "Name! (Team)" banner while resolving the face-off — updates instantly when the asker switches.
+  const foCur = (segmentKey(s)==='faceoff_post') ? faceoffCurrent(s) : null;
+  const bigName = foCur ? `<div class="h-bigname" style="border-color:${esc(foCur.color)}">${esc(foCur.name)}!<span class="tn">${esc(foCur.team)}</span></div>` : '';
   el.innerHTML=`
     <div class="h-top">
       <div class="h-game">${esc(s.gameName||'Friendly Feud')}</div>
@@ -1249,6 +1292,7 @@ function hostRender(s){
     <div class="h-conn"><span class="dot ok"></span>live · ${activeOwnerName?('owned by '+esc(activeOwnerName)):'updates from the control panel'}</div>
     <div class="h-strip">${teamCard(0)}${teamCard(1)}</div>
     ${pills.length?`<div class="h-mid">${pills.join('')}</div>`:''}
+    ${bigName}
     <div class="h-script"><div class="lab">Host script — read this</div>${scriptHtml}</div>
     ${qBlock}${fmBlock}
     <div class="h-card"><h3>${esc(rosTitle)}</h3><div class="h-ros">${ros}</div></div>`;
@@ -1642,10 +1686,11 @@ function renderFMTab(){
     <div class="row" style="margin-top:12px;border-top:1px solid var(--adm-line);padding-top:12px">
       <span class="mut">TOTAL</span><span class="bigStat" style="color:${fmTotal()>=config.target?'#7ee08a':'var(--gold2)'}">${fmTotal()} / ${config.target}</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="btn ${fm.result?'toggled ':''}gold big" data-act="fm-result">🏁 Reveal result</button>
+      <button class="btn gold big" data-act="fm-reveal-all" title="Show every answer and its survey points (incl. the #1 answer) for the audience — plays the reveal sound">👁 Reveal All Answers</button>
+      ${fm.result?`<span class="bigStat" style="color:${fm.result==='win'?'#7ee08a':'#9fb0d0'}">${fm.result==='win'?'WON 🎉':'Aww…'}</span>`:''}
       <label class="mut"><input type="checkbox" ${fm.autoResult?'checked':''} data-chg="fm-autoresult"> auto</label>
-      ${fm.result?`<span class="bigStat" style="color:${fm.result==='win'?'#7ee08a':'#9fb0d0'}">${fm.result==='win'?'WON 🎉':'Aww…'}</span><button class="btn sm" data-act="fm-result-clear">clear</button>`:''}
-      <button class="btn sm" data-act="fm-reveal-all" title="Show every answer and its survey points (incl. the #1 answer) for the audience">👁 Reveal All Answers</button>
+      <button class="btn sm ${fm.result?'toggled':''}" data-act="fm-result" title="Manually set the win/lose result (rarely needed — usually automatic)">🏁 Reveal result</button>
+      ${fm.result?`<button class="btn sm" data-act="fm-result-clear">clear</button>`:''}
     </div>
   </div>
   <div class="card"><h2>Question slots (pick 5 before the round)</h2>${sel}
@@ -1663,6 +1708,21 @@ function setFMStage(p){
   stopFMTick(); pushState();
 }
 function stopFMTick(){ if(fmTickInt){clearInterval(fmTickInt);fmTickInt=null;} }
+function fmStopClockEarly(){   // 5 answers captured (and no passes left) → end the countdown now instead of waiting
+  const t=state.fm.timer;
+  if(t.run){ t.run=false; stopFMTick(); stopCue(); pushState(); }
+}
+function advanceFMmic(stage){
+  // During the initial 0–4 sweep, move strictly to the next slot (skipping over passed slots).
+  if(!fmSweepDone && micSeq<=4){ micState={q:micSeq,p:stage}; return; }
+  fmSweepDone=true;
+  // Sweep finished — go back and pick up any still-blank slots (passes / cleared dups) in order.
+  const next=state.fm.cells.findIndex(c=>!(c.ans[stage]||'').trim());
+  if(next>=0){ micSeq=next; micState={q:next,p:stage}; return; }
+  // Everything is filled — stop listening and stop the clock early.
+  micState=null; try{ if(rec)rec.stop(); }catch(e){}
+  fmStopClockEarly();
+}
 function fmTimerCtl(cmd){
   const t=state.fm.timer;
   if(cmd==='set'){ stopFMTick(); const dur=(state.fm.stage===0?config.t1:config.t2);
@@ -1735,12 +1795,14 @@ function startCapture(slot,p){
    slot for the current player; a duplicate buzzes immediately and stays on the
    same slot for a re-answer. The button shows which answer is expected next. */
 let micSeq=0;
+let fmSweepDone=false;   // true once the initial 0–4 answer sweep is finished (then we revisit passes)
 function startDictation(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){uiToast('Speech recognition needs Google Chrome (and an internet connection). You can still type answers.');return;}
   if(rec){ try{rec.stop();}catch(e){} return; }   // already live -> toggle off
   const stage=state.fm.stage;
   micSeq=state.fm.cells.findIndex(c=>!(c.ans[stage]||'').trim()); if(micSeq<0)micSeq=0;
+  fmSweepDone=false;   // restarting capture begins a fresh sweep
   rec=new SR(); rec.lang=config.lang||'en-US'; rec.continuous=true; rec.interimResults=false; rec.maxAlternatives=1;
   micState={q:micSeq,p:stage};
   rec.onstart=()=>{ micReady=true; renderFMTab(); };
@@ -1753,8 +1815,8 @@ function startDictation(){
       if(!c.pass)c.pass=[false,false];
       if(/^(pass|i pass|skip|skip it|no answer|pass on (it|this))$/.test(txt.toLowerCase())){   // contestant passed — flag it, leave blank, move on
         c.pass[stage]=true; c.ans[stage]=''; c.pts[stage]=0;
-        micSeq=slot+1; micState = micSeq<=4 ? {q:micSeq,p:stage} : null;
-        pushState(); if(micSeq>4){ try{rec.stop();}catch(e){} }
+        micSeq=slot+1; advanceFMmic(stage);
+        pushState();
         continue;
       }
       c.pass[stage]=false; c.ans[stage]=txt;
@@ -1762,11 +1824,9 @@ function startDictation(){
         micState={q:slot,p:stage};
       }else{
         fmAutoPoints(slot,stage);
-        micSeq=slot+1;
-        micState = micSeq<=4 ? {q:micSeq,p:stage} : null;
+        micSeq=slot+1; advanceFMmic(stage);
       }
       pushState();
-      if(micSeq>4){ try{rec.stop();}catch(e){} }
     }
   };
   rec.onerror=ev=>{ if(ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed')){ micReady=false; uiToast('Microphone permission was blocked.\nAllow it from Chrome\'s address bar, or run the game via the localhost launcher.'); } };
@@ -2316,7 +2376,7 @@ const ACT={
       // WIN the moment 200 is reached (even during Player 1); LOSE only once both
       // players are done and all answers are scored without reaching the target.
       if(fmTotal()>=config.target){ state.fm.result='win'; sfx('fmwin'); }
-      else if(fmGameComplete()){ state.fm.result='lose'; sfx('lose'); }
+      else if(fmGameComplete()){ state.fm.result='lose'; fmLoseSequence(); }
     }
     pushState(); },
   'fm-clear-answers'(){ const p=state.fm.stage; state.fm.cells.forEach(c=>{ c.ans[p]=''; c.pts[p]=0; c.ansShown[p]=false; c.ptsShown[p]=false; if(c.pass)c.pass[p]=false; }); micSeq=0; pushState(); },
@@ -2327,9 +2387,10 @@ const ACT={
     if(c.pass[p]){ c.ans[p]=''; c.pts[p]=0; c.ansShown[p]=false; c.ptsShown[p]=false; }
     pushState(); },
   'fm-celebrate'(){ sfx('fmwin'); },
-  'fm-result'(){ const win=fmTotal()>=config.target; state.fm.result=win?'win':'lose'; sfx(win?'fmwin':'lose'); pushState(); },
+  'fm-result'(){ const win=fmTotal()>=config.target; state.fm.result=win?'win':'lose'; if(win) sfx('fmwin'); else fmLoseSequence(); pushState(); },
   'fm-result-clear'(){ state.fm.result=null; state.fm.hideResult=false; pushState(); },
   'fm-reveal-all'(){   // show every answer + its survey points (and the #1 survey answer) so the audience sees them
+    sfx('revealall');
     state.fm.cells.forEach(c=>{ for(let p=0;p<2;p++){ if((c.ans[p]||'').trim()) c.ansShown[p]=true; c.ptsShown[p]=true; } });
     if(state.fm.autoResult && !state.fm.result){ if(fmTotal()>=config.target) state.fm.result='win'; else if(fmGameComplete()) state.fm.result='lose'; }
     state.fm.hideResult=true;   // hide the "You Won" / confetti overlay so the revealed board is unobstructed
@@ -2386,6 +2447,8 @@ const CHG={
   'fm-ans'(a,el){ const c=state.fm.cells[+a[0]],p=+a[1]; c.ans[p]=el.value; lastFMCell={slot:+a[0],p};
     if(c.pass && el.value.trim()) c.pass[p]=false;   // typing a real answer clears the PASS flag
     if(!fmCheckDup(+a[0])) fmAutoPoints(+a[0],p);
+    // all five answers in for this stage (no passes pending) → end the clock early
+    if(p===state.fm.stage && !state.fm.cells.some(x=>!(x.ans[p]||'').trim())) fmStopClockEarly();
     pushState(); },
   'fm-pts'(a,el){ state.fm.cells[+a[0]].pts[+a[1]]=+el.value||0; pushState(); },
   'fm-cover'(a,el){ state.fm.hideP1col=el.checked; pushState(); },
@@ -2393,9 +2456,7 @@ const CHG={
   'fm-pname'(a,el){ if(!state.fm.pNames)state.fm.pNames=['Player 1','Player 2']; state.fm.pNames[+a[0]]=el.value.trim()||('Player '+(+a[0]+1)); pushState(); },
   'fm-pick'(a,el){ if(!el.value)return; if(!state.fm.pNames)state.fm.pNames=['Player 1','Player 2']; state.fm.pNames[+a[0]]=el.value; pushState(); },
   'script'(a,el){ if(!config.scripts)config.scripts={}; config.scripts[a[0]]=el.value; saveConfig(); pushState(); },
-  'audio-file'(a,el){ const f=el.files&&el.files[0]; if(!f)return; const k=a[0];
-    audioPut(k,f).then(()=>{ if(!config.audioNames)config.audioNames={}; config.audioNames[k]=f.name; saveConfig(); return loadAudio(); })
-      .then(()=>renderAdmin()).catch(()=>uiToast('Could not save that audio file.')); },
+  'audio-file'(a,el){ const f=el.files&&el.files[0]; if(!f)return; saveAudioForCue(a[0],f); },
   'audio-loop'(a,el){ if(!config.audioLoop)config.audioLoop={}; config.audioLoop[a[0]]=el.checked; saveConfig(); },
   'audio-len'(a,el){ if(!config.audioLen)config.audioLen={}; config.audioLen[a[0]]=Math.max(0,+el.value||0); saveConfig(); },
   'audio-import'(a,el){ const f=el.files&&el.files[0]; if(f) importSoundPack(f); },
@@ -2437,6 +2498,7 @@ function openRoundEnd(){
     + (last
         ? '<button class="btn gold big" data-act="declarewinner|final" '+(hidden?'disabled':'')+' title="'+(hidden?'Reveal all remaining answers first':'Crown the champions')+'">🏆 Declare game winner'+(hidden?' (reveal '+hidden+' first)':'')+'</button>'
         : '<button class="btn gold big" data-act="nextround" '+(hidden?'disabled':'')+' title="'+(hidden?'Reveal all remaining answers first':'Advance to the next round')+'">▶ Start Round '+(state.roundIdx+2)+(hidden?' (reveal '+hidden+' first)':'')+'</button>')
+    + '<button class="btn" data-act="audio-stop" title="Stop the round-winner music early">⏹ Stop music</button>'
     + '<button class="btn" data-act="round-end-close">Close</button>';
   ov.classList.remove('hidden');
 }
@@ -2687,11 +2749,22 @@ else if(MODE==='admin'){
   $('#aiOv').addEventListener('click',ev=>{ if(ev.target.id==='aiOv') closeAIModal(); });
   $('#ppOv').addEventListener('click',ev=>{ if(ev.target.id==='ppOv') closePP(); });
   $('#roundEndOv').addEventListener('click',ev=>{ if(ev.target.id==='roundEndOv') closeRoundEnd(); });
+  // Drag-and-drop an audio file straight onto a Sounds-panel cue row (avoids the focus-stealing
+  // native file dialog that can pull a full-screen scoreboard off a second display).
+  document.addEventListener('dragover',ev=>{ const row=ev.target.closest&&ev.target.closest('[data-drop]'); if(row){ ev.preventDefault(); ev.dataTransfer.dropEffect='copy'; row.classList.add('dropping'); } });
+  document.addEventListener('dragleave',ev=>{ const row=ev.target.closest&&ev.target.closest('[data-drop]'); if(row) row.classList.remove('dropping'); });
+  document.addEventListener('drop',ev=>{ const row=ev.target.closest&&ev.target.closest('[data-drop]'); if(!row)return;
+    ev.preventDefault(); row.classList.remove('dropping');
+    const f=ev.dataTransfer&&ev.dataTransfer.files&&ev.dataTransfer.files[0];
+    if(f && /audio\//.test(f.type||'')) saveAudioForCue(row.getAttribute('data-drop'),f);
+    else if(f) uiToast('That file isn’t an audio file.');
+  });
   $('#newGameBtn').onclick=()=>{
     uiConfirm('Start a new game? Scores, strikes and Fast Money reset. Team names and questions are kept.',()=>{
       pushUndo(JSON.stringify(state));
       const teams=state.teams.map(t=>({...t,score:0}));
-      stopFMTick(); state=newState(); state.teams=teams;
+      stopFMTick(); stopAllSounds();   // kill any final win/lose music bed before resetting
+      state=newState(); state.teams=teams;
       questionsVisited=false;   // restart the guided Current Status from Step 1
       pushState();
     },'New game');
